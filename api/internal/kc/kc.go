@@ -126,12 +126,12 @@ func errMessage(raw []byte) string {
 }
 
 var friendlyMsgs = map[string]string{
-	"invalidPasswordMinLengthMessage":   "The password is too short.",
-	"invalidPasswordMinDigitsMessage":   "The password needs at least one digit.",
+	"invalidPasswordMinLengthMessage":         "The password is too short.",
+	"invalidPasswordMinDigitsMessage":         "The password needs at least one digit.",
 	"invalidPasswordMinUpperCaseCharsMessage": "The password needs at least one upper-case letter.",
 	"invalidPasswordMinLowerCaseCharsMessage": "The password needs at least one lower-case letter.",
-	"invalidPasswordNotUsernameMessage": "The password must not be the username.",
-	"invalidPasswordHistoryMessage":     "The password was used recently.",
+	"invalidPasswordNotUsernameMessage":       "The password must not be the username.",
+	"invalidPasswordHistoryMessage":           "The password was used recently.",
 }
 
 func friendly(m string) string {

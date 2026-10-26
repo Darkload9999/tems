@@ -9,3 +9,4 @@ dist/
 .astro/
 api/tems-api
 *.log
+backups/

@@ -3,7 +3,8 @@
 // Keycloak + the store, and computes effective permissions from it.
 //
 // Effective(user) = super admin ? every permission
-//                 : (∪ permissions of the user's groups) ∪ direct grants − denies
+//
+//	: (∪ permissions of the user's groups) ∪ direct grants − denies
 package dir
 
 import (
@@ -30,23 +31,23 @@ type Group struct {
 }
 
 type Snapshot struct {
-	Users     []*kc.User
-	ByID      map[string]*kc.User
-	Groups    []*Group
-	GroupByID map[string]*Group
+	Users      []*kc.User
+	ByID       map[string]*kc.User
+	Groups     []*Group
+	GroupByID  map[string]*Group
 	UserGroups map[string][]string // user id → group ids
-	Grants    map[string][]string // user id → directly granted permissions
-	Denies    map[string][]string // user id → denied permissions
-	Supers    map[string]bool
-	Perms     []kc.Role // the permission catalog (tems-api client roles)
-	PermSet   map[string]kc.Role
-	LastLogin map[string]time.Time
+	Grants     map[string][]string // user id → directly granted permissions
+	Denies     map[string][]string // user id → denied permissions
+	Supers     map[string]bool
+	Perms      []kc.Role // the permission catalog (tems-api client roles)
+	PermSet    map[string]kc.Role
+	LastLogin  map[string]time.Time
 }
 
 type Dir struct {
-	kc        *kc.Client
-	st        *store.Store
-	ClientID  string // UUID of the tems-api client
+	kc       *kc.Client
+	st       *store.Store
+	ClientID string // UUID of the tems-api client
 
 	mu   sync.Mutex
 	snap *Snapshot
@@ -89,14 +90,28 @@ func (d *Dir) build(ctx context.Context) (*Snapshot, error) {
 	)
 	cid := kc.P(d.ClientID)
 	if err := parallel(
-		func() error { _, err := d.kc.Do(ctx, http.MethodGet, "/users?briefRepresentation=false&max=100000", nil, &users); return err },
-		func() error { _, err := d.kc.Do(ctx, http.MethodGet, "/groups?briefRepresentation=false&max=10000", nil, &groups); return err },
-		func() error { _, err := d.kc.Do(ctx, http.MethodGet, "/clients/"+cid+"/roles?briefRepresentation=false", nil, &s.Perms); return err },
-		func() error { _, err := d.kc.Do(ctx, http.MethodGet, "/roles/"+SuperAdminRole+"/users?max=100000", nil, &supers); return err },
+		func() error {
+			_, err := d.kc.Do(ctx, http.MethodGet, "/users?briefRepresentation=false&max=100000", nil, &users)
+			return err
+		},
+		func() error {
+			_, err := d.kc.Do(ctx, http.MethodGet, "/groups?briefRepresentation=false&max=10000", nil, &groups)
+			return err
+		},
+		func() error {
+			_, err := d.kc.Do(ctx, http.MethodGet, "/clients/"+cid+"/roles?briefRepresentation=false", nil, &s.Perms)
+			return err
+		},
+		func() error {
+			_, err := d.kc.Do(ctx, http.MethodGet, "/roles/"+SuperAdminRole+"/users?max=100000", nil, &supers)
+			return err
+		},
 		func() error {
 			// Last sign-ins come from Keycloak's stored LOGIN events (newest first).
 			_, err := d.kc.Do(ctx, http.MethodGet, "/events?type=LOGIN&max=5000", nil, &events)
-			if err != nil { events = nil } // events are cosmetic; never fail the snapshot over them
+			if err != nil {
+				events = nil
+			} // events are cosmetic; never fail the snapshot over them
 			return nil
 		},
 		func() (err error) { s.Denies, err = d.st.Denies(ctx); return },
