@@ -1,0 +1,148 @@
+# Techzaz EMS (TEMS) — centralized authentication + mail management.
+#
+#   web (gateway) ──/───────► Astro admin panel (static)
+#                 ├─/api/──► api       (Go)        ──► keycloak (admin REST)
+#                 └─/auth/─► keycloak  (OIDC, SSO) ──► db (postgres)
+#   api ──SMTP──► mail (Postfix + OpenDKIM, direct-to-MX delivery)
+#
+# Bring up:  ./scripts/init-env.sh && docker compose up -d --build
+name: tems
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: tems-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run scripts/init-env.sh}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      TEMS_DB_PASSWORD: ${TEMS_DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    container_name: tems-keycloak
+    restart: unless-stopped
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      KC_HOSTNAME: ${PUBLIC_URL}/auth
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: kcadmin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+      # Placeholders consumed by keycloak/import/tems-realm.json
+      PUBLIC_URL: ${PUBLIC_URL}
+      TEMS_API_CLIENT_SECRET: ${TEMS_API_CLIENT_SECRET}
+      TEMS_SUPERADMIN_USERNAME: ${TEMS_SUPERADMIN_USERNAME}
+      TEMS_SUPERADMIN_EMAIL: ${TEMS_SUPERADMIN_EMAIL}
+      TEMS_SUPERADMIN_PASSWORD: ${TEMS_SUPERADMIN_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME}
+    volumes:
+      - ./keycloak/import:/opt/keycloak/data/import:ro
+      - ./keycloak/themes/tems:/opt/keycloak/themes/tems:ro
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    logging: *logging
+
+  mail:
+    image: boky/postfix:latest
+    container_name: tems-mail
+    restart: unless-stopped
+    hostname: ${MAIL_HOSTNAME}
+    environment:
+      ALLOWED_SENDER_DOMAINS: ${MAIL_DOMAIN}
+      POSTFIX_myhostname: ${MAIL_HOSTNAME}
+      DKIM_AUTOGENERATE: "true"
+      DKIM_SELECTOR: tems
+      POSTFIX_smtp_tls_security_level: may   # opportunistic TLS to recipients' MX
+    volumes:
+      - mail_dkim:/etc/opendkim/keys
+      - mail_spool:/var/spool/postfix
+    logging: *logging
+
+  api:
+    build: ./api
+    image: tems-api:latest
+    container_name: tems-api
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL}
+      DATABASE_URL: postgres://tems:${TEMS_DB_PASSWORD}@db:5432/tems?sslmode=disable
+      KC_INTERNAL_URL: http://keycloak:8080/auth
+      KC_REALM: tems
+      KC_API_CLIENT_ID: tems-api
+      KC_API_CLIENT_SECRET: ${TEMS_API_CLIENT_SECRET}
+      KC_ADMIN_CLIENT_ID: tems-admin
+      SMTP_HOST: mail
+      SMTP_PORT: "587"
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME}
+      MAIL_DOMAIN: ${MAIL_DOMAIN}
+      DKIM_SELECTOR: tems
+    depends_on:
+      db: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+      mail: { condition: service_started }
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "/tems-api", "-healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging
+
+  web:
+    build:
+      context: ./web
+      args:
+        PUBLIC_TEMS_DEMO: ${TEMS_DEMO:-false}   # true = console runs on built-in demo data
+    image: tems-web:latest
+    container_name: tems-web
+    restart: unless-stopped
+    ports:
+      - "${TEMS_BIND:-127.0.0.1}:${TEMS_PORT:-8088}:8080"
+    depends_on:
+      api: { condition: service_started }
+      keycloak: { condition: service_healthy }
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *logging
+
+volumes:
+  db_data:
+  mail_dkim:
+  mail_spool:

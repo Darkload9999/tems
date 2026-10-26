@@ -1,0 +1,149 @@
+{
+  "realm": "tems",
+  "enabled": true,
+  "displayName": "Techzaz EMS",
+  "displayNameHtml": "<span class=\"wm-thin\">TECHZAZ</span><span class=\"wm-plus\">+</span><span class=\"wm-bold\">EMS</span>",
+  "loginTheme": "tems",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "passwordPolicy": "length(10) and digits(1) and upperCase(1) and lowerCase(1) and notUsername(undefined)",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "internationalizationEnabled": false,
+  "eventsEnabled": true,
+  "eventsExpiration": 7776000,
+  "eventsListeners": ["jboss-logging"],
+  "enabledEventTypes": ["LOGIN", "LOGIN_ERROR", "LOGOUT", "UPDATE_PASSWORD", "VERIFY_EMAIL", "EXECUTE_ACTIONS"],
+  "smtpServer": {
+    "host": "mail",
+    "port": "587",
+    "from": "${MAIL_FROM}",
+    "fromDisplayName": "${MAIL_FROM_NAME}",
+    "auth": "false",
+    "ssl": "false",
+    "starttls": "false"
+  },
+  "roles": {
+    "realm": [
+      { "name": "super-admin", "description": "Unrestricted access to every part of Techzaz EMS" }
+    ],
+    "client": {
+      "tems-api": [
+        { "name": "dashboard:view",       "description": "View the dashboard and system statistics",              "attributes": { "system": ["true"], "category": ["Dashboard"] } },
+        { "name": "users:view",           "description": "View users and their profiles",                          "attributes": { "system": ["true"], "category": ["Users"] } },
+        { "name": "users:create",         "description": "Create new user accounts",                               "attributes": { "system": ["true"], "category": ["Users"] } },
+        { "name": "users:edit",           "description": "Edit profiles, enable and disable accounts",             "attributes": { "system": ["true"], "category": ["Users"] } },
+        { "name": "users:delete",         "description": "Permanently delete user accounts",                       "attributes": { "system": ["true"], "category": ["Users"] } },
+        { "name": "users:reset-password", "description": "Reset passwords and send account setup links",           "attributes": { "system": ["true"], "category": ["Users"] } },
+        { "name": "users:sessions",       "description": "View and revoke active sign-in sessions",                "attributes": { "system": ["true"], "category": ["Users"] } },
+        { "name": "groups:view",          "description": "View groups and their members",                          "attributes": { "system": ["true"], "category": ["Groups"] } },
+        { "name": "groups:create",        "description": "Create new groups",                                      "attributes": { "system": ["true"], "category": ["Groups"] } },
+        { "name": "groups:edit",          "description": "Rename groups and edit their details",                   "attributes": { "system": ["true"], "category": ["Groups"] } },
+        { "name": "groups:delete",        "description": "Delete groups",                                          "attributes": { "system": ["true"], "category": ["Groups"] } },
+        { "name": "groups:members",       "description": "Add and remove group members",                           "attributes": { "system": ["true"], "category": ["Groups"] } },
+        { "name": "permissions:view",     "description": "View the permission catalog and assignments",            "attributes": { "system": ["true"], "category": ["Permissions"] } },
+        { "name": "permissions:manage",   "description": "Assign permissions to groups and members; edit catalog", "attributes": { "system": ["true"], "category": ["Permissions"] } },
+        { "name": "mail:view",            "description": "View the outbox and delivery status",                    "attributes": { "system": ["true"], "category": ["Mail"] } },
+        { "name": "mail:send",            "description": "Compose and send messages to users and groups",          "attributes": { "system": ["true"], "category": ["Mail"] } },
+        { "name": "mail:manage",          "description": "Resend, cancel and delete mail; manage notifications",   "attributes": { "system": ["true"], "category": ["Mail"] } },
+        { "name": "audit:view",           "description": "View the audit log",                                     "attributes": { "system": ["true"], "category": ["Audit"] } },
+        { "name": "settings:manage",      "description": "Change system settings",                                 "attributes": { "system": ["true"], "category": ["Settings"] } }
+      ]
+    }
+  },
+  "groups": [
+    {
+      "name": "Administrators",
+      "attributes": { "description": ["Full operational access to users, groups, mail and audit"] },
+      "clientRoles": {
+        "tems-api": [
+          "dashboard:view", "users:view", "users:create", "users:edit", "users:delete", "users:reset-password", "users:sessions",
+          "groups:view", "groups:create", "groups:edit", "groups:delete", "groups:members",
+          "permissions:view", "permissions:manage", "mail:view", "mail:send", "mail:manage", "audit:view", "settings:manage"
+        ]
+      }
+    },
+    {
+      "name": "Support",
+      "attributes": { "description": ["Help-desk: manage accounts and contact users"] },
+      "clientRoles": {
+        "tems-api": [
+          "dashboard:view", "users:view", "users:edit", "users:reset-password", "users:sessions",
+          "groups:view", "mail:view", "mail:send", "audit:view"
+        ]
+      }
+    },
+    {
+      "name": "Staff",
+      "attributes": { "description": ["Standard employees: sign in and manage their own account"] },
+      "clientRoles": { "tems-api": ["dashboard:view"] }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "tems-admin",
+      "name": "Techzaz EMS Console",
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "rootUrl": "${PUBLIC_URL}",
+      "baseUrl": "/",
+      "redirectUris": ["${PUBLIC_URL}/*"],
+      "webOrigins": ["${PUBLIC_URL}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${PUBLIC_URL}/*"
+      }
+    },
+    {
+      "clientId": "tems-api",
+      "name": "Techzaz EMS API",
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${TEMS_API_CLIENT_SECRET}",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    }
+  ],
+  "users": [
+    {
+      "username": "${TEMS_SUPERADMIN_USERNAME}",
+      "email": "${TEMS_SUPERADMIN_EMAIL}",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Super",
+      "lastName": "Admin",
+      "credentials": [{ "type": "password", "value": "${TEMS_SUPERADMIN_PASSWORD}", "temporary": false }],
+      "realmRoles": ["super-admin", "default-roles-tems"],
+      "groups": ["/Administrators"]
+    },
+    {
+      "username": "service-account-tems-api",
+      "enabled": true,
+      "serviceAccountClientId": "tems-api",
+      "realmRoles": ["default-roles-tems"],
+      "clientRoles": {
+        "realm-management": [
+          "manage-users", "view-users", "query-users", "query-groups",
+          "view-clients", "manage-clients", "view-realm", "manage-realm", "view-events"
+        ]
+      }
+    }
+  ]
+}
