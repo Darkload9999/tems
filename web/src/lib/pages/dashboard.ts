@@ -27,6 +27,10 @@ export default async function dashboard({ api, me, can, main, ctx }: PageCtx) {
     { t: 'Failed deliveries', v: stats.mailFailed, s: stats.mailFailed ? 'Needs attention' : 'All clear', i: 'warn', href: '/mail/?status=failed', p: 'mail:view' },
     { t: 'Active sessions', v: stats.sessions, s: 'Signed-in browsers right now', i: 'activity', href: '/users/', p: 'users:sessions' },
     { t: 'Super admins', v: stats.superAdmins, s: 'Unrestricted access holders', i: 'crown', href: '/settings/#super-admins', p: 'settings:manage' },
+    { t: 'Employees', v: stats.employees, s: `${stats.onboarding} onboarding right now`, i: 'briefcase', href: '/employees/', p: 'employees:view', own: true },
+    { t: 'Awaiting approval', v: stats.pendingApproval, s: stats.pendingApproval ? 'Onboardings to review' : 'Nothing to review', i: 'shield', href: '/employees/?stage=approval', p: 'employees:view', own: true },
+    { t: 'Active projects', v: stats.activeProjects, s: 'Planning, active or on hold', i: 'layers', href: '/projects/', p: 'projects:view', own: true },
+    { t: 'Open tickets', v: stats.openTickets, s: 'Open, in progress or in review', i: 'inbox', href: '/tickets/', p: 'tickets:view', own: true },
   ];
 
   const groupLines = (groups ?? []).map((g) => html`<span class="c-str">${g.name.padEnd(16)}</span><span class="c-com">${String(g.memberCount).padStart(3)} members  ${String(g.permissions.length).padStart(3)} perms</span>\n`);
@@ -39,7 +43,7 @@ export default async function dashboard({ api, me, can, main, ctx }: PageCtx) {
     <p class="lede reveal" style="--i:1">You're signed in as <b>${me.username}</b>${me.superAdmin ? html` with <b>super administrator</b> rights` : html` with <b>${me.permissions.length}</b> permission${me.permissions.length === 1 ? '' : 's'}`}${me.groups.length ? html` through ${me.groups.join(', ')}` : ''}.</p>
 
     <div class="cards" id="glance">
-      ${cards.map((c) => {
+      ${cards.filter((c) => !('own' in c) || can(c.p)).map((c) => {
         const inner = html`${ico(c.i, 'card-ico')}<h4>${c.t}</h4><div class="big">${c.v}</div><div class="trend">${c.s}</div>`;
         return can(c.p) ? html`<a class="card reveal-item" href="${c.href}">${inner}</a>` : html`<div class="card reveal-item">${inner}</div>`;
       })}

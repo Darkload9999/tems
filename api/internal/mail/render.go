@@ -15,8 +15,17 @@ var Events = []string{
 	"user.created", "user.updated", "user.disabled", "user.enabled", "user.deleted",
 	"user.password_reset", "user.sessions_revoked", "superadmin.granted", "superadmin.revoked",
 	"group.member_added", "group.member_removed", "group.permissions_changed", "group.renamed", "group.deleted",
-	"member.permissions_changed", "mail.direct",
+	"member.permissions_changed",
+	"employee.onboarding_started", "employee.updated", "employee.payroll_changed", "employee.document_added",
+	"employee.approval_requested", "employee.approved", "employee.rejected", "employee.offboarded",
+	"agreement.sent", "agreement.signed",
+	"project.assigned", "project.unassigned", "project.status_changed",
+	"ticket.assigned", "ticket.updated", "ticket.commented",
+	"mail.direct",
 }
+
+// Forced events are always delivered, whatever the notification settings say.
+var Forced = map[string]bool{"mail.direct": true, "agreement.sent": true}
 
 type Data struct {
 	Origin    string
@@ -31,6 +40,14 @@ type Data struct {
 	Setup     string // "link" | "temporary"
 	Subject   string
 	Message   string
+
+	Link    string // call-to-action target (defaults to Origin)
+	Person  string // the employee a staff-facing email is about
+	Role    string // job title / project role
+	Item    string // document, agreement or ticket title
+	Project string
+	Note    string // free text from the actor (approval note, comment, status note)
+	Expires string // human-readable link expiry
 }
 
 type copyText struct {
@@ -83,6 +100,49 @@ func copyFor(ev string, d Data) copyText {
 		return copyText{g + " was deleted", "Group deleted.", "The group <b>" + e(g) + "</b> was deleted. Any permissions it granted you have been removed.", "", "", "warn"}
 	case "member.permissions_changed":
 		return copyText{"Your permissions changed", "Access updated.", "An administrator changed your personal permissions:", "", "", ""}
+	case "employee.onboarding_started":
+		lead := "Our HR team has started your onboarding at Techzaz Networks."
+		if d.Role != "" {
+			lead = "Our HR team has started your onboarding at Techzaz Networks as <b>" + e(d.Role) + "</b>."
+		}
+		return copyText{"Welcome to Techzaz Networks", "Welcome.", lead, "Next, HR will collect your documents (birth certificate, NIC and educational qualifications). After an approval, you will receive your employment agreement to review and sign online. You don't need to do anything yet.", "", "ok"}
+	case "employee.updated":
+		return copyText{"Your employee record was updated", "Record updated.", "HR updated the following details in your employee record:", "", "", ""}
+	case "employee.payroll_changed":
+		return copyText{"Your payroll details were updated", "Payroll updated.", "HR updated your payroll details:", "If anything looks wrong, contact HR.", "", ""}
+	case "employee.document_added":
+		return copyText{"A document was added to your employee file", "File updated.", "HR added <b>" + e(d.Item) + "</b> to your employee file.", "", "", ""}
+	case "employee.approval_requested":
+		return copyText{"Approval needed: " + d.Person, "Approval needed.", "<b>" + e(d.Actor) + "</b> submitted <b>" + e(d.Person) + "</b>" + roleSuffix(d.Role) + " for onboarding approval. All required documents are uploaded.", "", "Review in Techzaz EMS", ""}
+	case "employee.approved":
+		return copyText{d.Person + " was approved", "Approved.", "The onboarding of <b>" + e(d.Person) + "</b> was approved. You can now send their employment agreement.", "", "Open employee", "ok"}
+	case "employee.rejected":
+		return copyText{d.Person + " needs changes", "Changes needed.", "The onboarding of <b>" + e(d.Person) + "</b> was sent back for changes.", "", "Open employee", "warn"}
+	case "employee.offboarded":
+		return copyText{"Your employee record was closed", "Farewell.", "Your employee record at Techzaz Networks has been closed. Thank you for everything you contributed.", "", "", "warn"}
+	case "agreement.sent":
+		body := "Open the secure link below, read the agreement carefully, then sign in the signature box. The link is personal to you; please don't forward it."
+		if d.Expires != "" {
+			body += " It expires on " + d.Expires + "."
+		}
+		return copyText{"Please review and sign: " + d.Item, "Your agreement.", "Techzaz Networks has sent you <b>" + e(d.Item) + "</b> to review and sign online.", body, "Review and sign", "ok"}
+	case "agreement.signed":
+		if d.Person != "" {
+			return copyText{d.Person + " signed " + d.Item, "Signed.", "<b>" + e(d.Person) + "</b> signed <b>" + e(d.Item) + "</b>. A signed copy was added to their employee file.", "", "Open employee", "ok"}
+		}
+		return copyText{"You signed " + d.Item, "Signed.", "Thank you. You signed <b>" + e(d.Item) + "</b>. A signed copy is kept in your employee file.", "", "View the signed agreement", "ok"}
+	case "project.assigned":
+		return copyText{"You were added to " + d.Project, "New project.", "You were assigned to <b>" + e(d.Project) + "</b>" + roleSuffix(d.Role) + ".", "", "Open my work", "ok"}
+	case "project.unassigned":
+		return copyText{"You were removed from " + d.Project, "Project left.", "You are no longer assigned to <b>" + e(d.Project) + "</b>.", "", "", ""}
+	case "project.status_changed":
+		return copyText{d.Project + ": status update", "Status update.", "There is a new status update for <b>" + e(d.Project) + "</b>:", "", "Open my work", ""}
+	case "ticket.assigned":
+		return copyText{"Assigned to you: " + d.Item, "New ticket.", "<b>" + e(d.Actor) + "</b> assigned you <b>" + e(d.Item) + "</b> in " + e(d.Project) + ".", "", "Open ticket", ""}
+	case "ticket.updated":
+		return copyText{"Updated: " + d.Item, "Ticket update.", "<b>" + e(d.Item) + "</b> in " + e(d.Project) + " was updated:", "", "Open ticket", ""}
+	case "ticket.commented":
+		return copyText{"New comment: " + d.Item, "New comment.", "<b>" + e(d.Actor) + "</b> commented on <b>" + e(d.Item) + "</b>:", "", "Open ticket", ""}
 	case "mail.direct":
 		s := d.Subject
 		if s == "" {
@@ -91,6 +151,13 @@ func copyFor(ev string, d Data) copyText {
 		return copyText{s, "Message.", "", "", "", ""}
 	}
 	return copyText{"Notification from Techzaz EMS", "Notice.", "", "", "", ""}
+}
+
+func roleSuffix(role string) string {
+	if role == "" {
+		return ""
+	}
+	return " as <b>" + e(role) + "</b>"
 }
 
 func rows(items []string, color, sign string) string {
@@ -122,7 +189,7 @@ func Render(ev string, d Data) (subject, htmlBody, text string) {
 		}
 	}
 	verb := "Changed"
-	if ev == "mail.direct" {
+	if ev == "mail.direct" || ev == "agreement.sent" {
 		verb = "Sent"
 	}
 	when := time.Now().Format("02 Jan 2006, 15:04")
@@ -154,11 +221,18 @@ func Render(ev string, d Data) (subject, htmlBody, text string) {
 	if list != "" {
 		fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="background:#f1ecfd;border-radius:12px;margin:4px 0 18px"><tr><td style="padding:14px 18px"><table role="presentation" cellpadding="0" cellspacing="0">%s</table></td></tr></table>`, list)
 	}
+	if d.Note != "" {
+		fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px"><tr><td style="border-left:3px solid %s;background:#f7f4fd;border-radius:0 10px 10px 0;padding:12px 16px;font-size:14px;color:#3a3647">%s</td></tr></table>`, accent, strings.ReplaceAll(e(d.Note), "\n", "<br>"))
+	}
 	if c.body != "" {
 		fmt.Fprintf(&b, `<p style="margin:0 0 14px">%s</p>`, e(c.body))
 	}
+	link := d.Link
+	if link == "" {
+		link = d.Origin
+	}
 	if c.cta != "" {
-		fmt.Fprintf(&b, `<p style="margin:22px 0 22px"><a href="%s" style="display:inline-block;background:#22094d;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">%s &rarr;</a></p>`, e(d.Origin), e(c.cta))
+		fmt.Fprintf(&b, `<p style="margin:22px 0 22px"><a href="%s" style="display:inline-block;background:#22094d;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">%s &rarr;</a></p>`, e(link), e(c.cta))
 	}
 	fmt.Fprintf(&b, `<p style="margin:18px 0 0;padding-top:16px;border-top:1px solid #ece7f6;font-size:12.5px;color:#6d6884">%s by %s · %s.<br>If you did not expect this email, contact <a href="mailto:soc@techzaz.lk" style="color:#5b3fd6">soc@techzaz.lk</a>.</p>`, verb, e(d.Actor), e(when))
 	b.WriteString(`</td></tr><tr><td style="padding:16px 30px 22px;font-size:11.5px;color:#9a95ad;line-height:1.6">Techzaz Networks · 476/2 Sri Rajasinghe Mawatha, Wattala 11104, Sri Lanka<br>This is an automated message from Techzaz EMS. Please do not reply.</td></tr>`)
@@ -182,11 +256,14 @@ func Render(ev string, d Data) (subject, htmlBody, text string) {
 	for _, x := range d.Changes {
 		t = append(t, "* "+x)
 	}
+	if d.Note != "" {
+		t = append(t, "", "> "+strings.ReplaceAll(d.Note, "\n", "\n> "))
+	}
 	if c.body != "" {
 		t = append(t, "", c.body)
 	}
 	if c.cta != "" {
-		t = append(t, "", c.cta+": "+d.Origin)
+		t = append(t, "", c.cta+": "+link)
 	}
 	t = append(t, "", verb+" by "+d.Actor+" · "+when+".", "Techzaz Networks — automated message from Techzaz EMS.")
 	return c.subject, b.String(), strings.Join(t, "\n")

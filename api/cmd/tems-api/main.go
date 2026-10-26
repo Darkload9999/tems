@@ -64,6 +64,9 @@ func run() error {
 	if err := bootstrapRealm(ctx, k); err != nil {
 		slog.Warn("realm bootstrap", "err", err)
 	}
+	if err := server.EnsureCatalog(ctx, k, clientUUID); err != nil {
+		slog.Warn("permission catalog", "err", err)
+	}
 
 	d := dir.New(k, st, clientUUID)
 	var srv *server.Server

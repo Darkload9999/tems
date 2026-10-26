@@ -1,14 +1,28 @@
 # Techzaz EMS (TEMS)
 
-Centralized authentication and mail management for Techzaz Networks.
+Centralized sign-in, people and project management for Techzaz Networks: users and access groups,
+employee records with onboarding and e-signed agreements, projects with status tracking, and tickets.
+Everyone a change affects is emailed.
 
 | Service    | Tech                         | Role                                                        |
 |------------|------------------------------|-------------------------------------------------------------|
 | `web`      | Astro + nginx                | Admin console; gateway for `/api` and `/auth` on one origin |
-| `api`      | Go                           | Users, groups, permissions, audit, notification outbox      |
+| `api`      | Go                           | Users, groups, permissions, employees, projects, tickets, audit, notification outbox |
 | `keycloak` | Keycloak 26                  | Sign-in (OIDC + PKCE), sessions, password policy            |
 | `mail`     | Postfix + OpenDKIM           | DKIM-signed outbound mail from `no-reply@tems.techzaz.lk`   |
-| `db`       | PostgreSQL 16                | Keycloak + TEMS data                                         |
+| `db`       | PostgreSQL 16                | Keycloak + TEMS data (including uploaded documents)          |
+
+## Modules
+
+| Console page | What it does |
+|---|---|
+| **Users, Groups, Permissions** | Sign-in accounts, access groups and the permission catalog. Super admins create groups for any team (HR, Project Managers, …) and choose exactly what each group can do. |
+| **Employees** | Employee records with personal details, payroll (salary, allowances, EPF/ETF numbers, bank) and documents: birth certificate, NIC, educational qualifications, CV, EPF, ETF, salary and bank documents, agreements. |
+| **Onboarding** | Every new employee moves through **Documents → Approval → Agreement → Active**. HR uploads the required documents (set in Settings) and submits; a *different* admin approves or sends it back with a note; HR sends the agreement and the candidate gets a **private signing link** to read it and sign in a signature box. Signing files a signed copy (signature, name, time, IP, document hash) and completes the onboarding. |
+| **Projects** | Teams with roles and allocation, a project lead, and **status tracking**: status (planning, active, on hold, completed, cancelled), health (on track, at risk, off track), progress from resolved tickets, overdue warnings and a timeline of status updates. |
+| **Tickets** | Per-project tasks, bugs, features and support requests (`KEY-12`), on a board or a list, with priority, due date, assignee (from the project team), comments and an activity trail. |
+| **My work** | For staff whose sign-in account is linked to their employee record: their projects and the tickets assigned to them. |
+| **Mail, Audit, Settings** | Outbox with delivery status, the full audit trail, sender identity, password policy, required onboarding documents and which events send email. |
 
 ## Access model
 
@@ -16,13 +30,15 @@ Centralized authentication and mail management for Techzaz Networks.
 - **Groups** carry permissions. A member's effective access = all their groups' permissions ∪ personal **allows** − personal **denies**.
 - **Super admins** (realm role `super-admin`) bypass every check.
 - Safety rails: you can only grant permissions you hold, you can't change your own access, and at least one super admin must remain.
-- Every admin change is written to the audit log, and **the affected users are emailed** (configurable per event in Settings).
+- Every admin change is written to the audit log, and **the affected people are emailed** (configurable per event in Settings): account and access changes, onboarding steps, payroll and document changes, approvals, agreements to sign and signed, project assignments and status updates, ticket assignments, changes and comments. Agreement signing links are always sent.
+- People permissions: `employees:view|manage|approve|payroll|delete`, `projects:view|manage`, `tickets:view|create|manage`. Payroll details and payroll documents (EPF, ETF, salary, bank) need `employees:payroll`. Nobody can approve an onboarding they submitted (super admins excepted). The realm ships **HR** and **Project Managers** groups as starting points.
 
 ## Status
 
 - [x] Console (`web/`): runs live, or on built-in demo data with `PUBLIC_TEMS_DEMO=true`
 - [x] Compose stack, env generator, Postgres init, Keycloak realm import
 - [x] Go API (`api/`): implements the contract in `web/src/lib/api.ts`; verified end to end against Keycloak 26
+- [x] Employees, onboarding pipeline, document uploads, e-signed agreements, projects with status tracking, tickets
 - [x] Keycloak login theme (`keycloak/themes/tems/`)
 - [x] Deploy kit: Caddy TLS front, mail DNS helper, backups ([`deploy/DEPLOY.md`](deploy/DEPLOY.md))
 - [ ] Go live on `tems.techzaz.lk` and publish SPF / DKIM / DMARC (follow `deploy/DEPLOY.md`)

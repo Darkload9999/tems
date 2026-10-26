@@ -3,8 +3,8 @@ import type { AuditEntry } from '../types';
 import { $, debounce, fmt, html, ico, modal, mount, on, pager, rel, stagger } from '../ui';
 
 const SIZE = 15;
-const TYPES: Array<[string, string]> = [['all', 'Everything'], ['user', 'Users'], ['group', 'Groups'], ['permission', 'Permissions'], ['session', 'Sessions'], ['mail', 'Mail'], ['settings', 'Settings']];
-const ICON: Record<string, string> = { user: 'user', group: 'group', permission: 'shield', session: 'logout', mail: 'mail', settings: 'settings' };
+const TYPES: Array<[string, string]> = [['all', 'Everything'], ['user', 'Users'], ['group', 'Groups'], ['permission', 'Permissions'], ['session', 'Sessions'], ['mail', 'Mail'], ['settings', 'Settings'], ['employee', 'Employees'], ['project', 'Projects'], ['ticket', 'Tickets']];
+const ICON: Record<string, string> = { user: 'user', group: 'group', permission: 'shield', session: 'logout', mail: 'mail', settings: 'settings', employee: 'briefcase', project: 'layers', ticket: 'inbox' };
 const tone = (a: AuditEntry) => /delete|disable|revoke|remove/.test(a.action) ? 'err' : /create|enable|grant|add/.test(a.action) ? 'ok' : '';
 
 export default async function audit({ api, main, ctx }: PageCtx) {

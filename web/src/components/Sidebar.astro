@@ -12,6 +12,14 @@ const sections: { label: string; links: Link[] }[] = [
     { href: '/users/', label: 'Users', icon: 'users', perm: 'users:view', count: 'users' },
     { href: '/groups/', label: 'Groups', icon: 'group', perm: 'groups:view', count: 'groups' },
   ]},
+  { label: 'People', links: [
+    { href: '/employees/', label: 'Employees', icon: 'briefcase', perm: 'employees:view', count: 'pendingApproval' },
+  ]},
+  { label: 'Work', links: [
+    { href: '/work/', label: 'My work', icon: 'check', perm: '@employee' },
+    { href: '/projects/', label: 'Projects', icon: 'layers', perm: 'projects:view' },
+    { href: '/tickets/', label: 'Tickets', icon: 'inbox', perm: 'tickets:view', count: 'openTickets' },
+  ]},
   { label: 'Access', links: [
     { href: '/permissions/', label: 'Permissions', icon: 'shield', perm: 'permissions:view', count: 'permissions' },
   ]},

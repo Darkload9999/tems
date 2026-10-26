@@ -58,19 +58,31 @@
         { "name": "mail:send",            "description": "Compose and send messages to users and groups",          "attributes": { "system": ["true"], "category": ["Mail"] } },
         { "name": "mail:manage",          "description": "Resend, cancel and delete mail; manage notifications",   "attributes": { "system": ["true"], "category": ["Mail"] } },
         { "name": "audit:view",           "description": "View the audit log",                                     "attributes": { "system": ["true"], "category": ["Audit"] } },
-        { "name": "settings:manage",      "description": "Change system settings",                                 "attributes": { "system": ["true"], "category": ["Settings"] } }
+        { "name": "settings:manage",      "description": "Change system settings",                                 "attributes": { "system": ["true"], "category": ["Settings"] } },
+        { "name": "employees:view",       "description": "View employee records, documents and onboarding status", "attributes": { "system": ["true"], "category": ["Employees"] } },
+        { "name": "employees:manage",     "description": "Create and edit employees, upload documents, send agreements", "attributes": { "system": ["true"], "category": ["Employees"] } },
+        { "name": "employees:approve",    "description": "Approve or reject onboarding (cannot approve your own submissions)", "attributes": { "system": ["true"], "category": ["Employees"] } },
+        { "name": "employees:payroll",    "description": "View and edit salary, EPF/ETF and bank details and payroll documents", "attributes": { "system": ["true"], "category": ["Employees"] } },
+        { "name": "employees:delete",     "description": "Permanently delete employee records and their documents", "attributes": { "system": ["true"], "category": ["Employees"] } },
+        { "name": "projects:view",        "description": "View every project, its team and status history",       "attributes": { "system": ["true"], "category": ["Projects"] } },
+        { "name": "projects:manage",      "description": "Create projects, assign people and post status updates", "attributes": { "system": ["true"], "category": ["Projects"] } },
+        { "name": "tickets:view",         "description": "View tickets on every project",                          "attributes": { "system": ["true"], "category": ["Tickets"] } },
+        { "name": "tickets:create",       "description": "Raise tickets on any project",                           "attributes": { "system": ["true"], "category": ["Tickets"] } },
+        { "name": "tickets:manage",       "description": "Edit, assign, close and delete any ticket",              "attributes": { "system": ["true"], "category": ["Tickets"] } }
       ]
     }
   },
   "groups": [
     {
       "name": "Administrators",
-      "attributes": { "description": ["Full operational access to users, groups, mail and audit"] },
+      "attributes": { "description": ["Full operational access to users, groups, people, projects, mail and audit"] },
       "clientRoles": {
         "tems-api": [
           "dashboard:view", "users:view", "users:create", "users:edit", "users:delete", "users:reset-password", "users:sessions",
           "groups:view", "groups:create", "groups:edit", "groups:delete", "groups:members",
-          "permissions:view", "permissions:manage", "mail:view", "mail:send", "mail:manage", "audit:view", "settings:manage"
+          "permissions:view", "permissions:manage", "mail:view", "mail:send", "mail:manage", "audit:view", "settings:manage",
+          "employees:view", "employees:manage", "employees:approve", "employees:payroll", "employees:delete",
+          "projects:view", "projects:manage", "tickets:view", "tickets:create", "tickets:manage"
         ]
       }
     },
@@ -88,6 +100,24 @@
       "name": "Staff",
       "attributes": { "description": ["Standard employees: sign in and manage their own account"] },
       "clientRoles": { "tems-api": ["dashboard:view"] }
+    },
+    {
+      "name": "HR",
+      "attributes": { "description": ["Human resources: employee records, documents, payroll and agreements"] },
+      "clientRoles": {
+        "tems-api": [
+          "dashboard:view", "employees:view", "employees:manage", "employees:payroll", "users:view", "mail:view"
+        ]
+      }
+    },
+    {
+      "name": "Project Managers",
+      "attributes": { "description": ["Run projects: assign people, track status and manage tickets"] },
+      "clientRoles": {
+        "tems-api": [
+          "dashboard:view", "employees:view", "projects:view", "projects:manage", "tickets:view", "tickets:create", "tickets:manage"
+        ]
+      }
     }
   ],
   "clients": [
