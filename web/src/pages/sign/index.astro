@@ -1,0 +1,44 @@
+---
+// Candidate-facing agreement signing page. Public: reached through the private
+// link in the "please sign" email; no Techzaz EMS sign-in involved.
+import '@fontsource-variable/plus-jakarta-sans';
+import '@fontsource/montserrat/300.css';
+import '@fontsource/montserrat/700.css';
+import '../../styles/theme.css';
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="theme-color" content="#2d0d60" />
+    <title>Review and sign · Techzaz EMS</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+  </head>
+  <body class="sign-page">
+    <div class="canvas" aria-hidden="true"><div class="glow-2"></div></div>
+    <header class="topbar">
+      <a href="#" class="wordmark" aria-label="Techzaz EMS">
+        <img src="/brand/logo-mark.png" alt="" width="42" height="30" />
+        <span><span class="wm-thin">TECHZAZ</span><span class="wm-plus">+</span><span class="wm-bold">EMS</span></span>
+      </a>
+    </header>
+    <main class="sign-wrap">
+      <div class="win sign-win">
+        <div class="win-dots"><i></i><i></i><i></i></div>
+        <div class="sign-card" id="sign" aria-live="polite">
+          <div class="skel" style="height:28px;width:60%;margin-bottom:16px"></div>
+          <div class="skel" style="height:14px;margin-bottom:8px"></div>
+          <div class="skel" style="height:14px;width:90%;margin-bottom:8px"></div>
+          <div class="skel" style="height:14px;width:80%"></div>
+        </div>
+      </div>
+      <p class="sign-foot">Your signature, name, the time and your IP address are recorded with the agreement. Questions? Contact <a href="mailto:hr@techzaz.lk">hr@techzaz.lk</a>.</p>
+    </main>
+    <script>
+      import '../../lib/sign';
+    </script>
+  </body>
+</html>

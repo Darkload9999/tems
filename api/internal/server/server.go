@@ -99,6 +99,49 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/audit", s.h(s.listAudit))
 		r.Get("/settings", s.h(s.getSettings))
 		r.Put("/settings", s.h(s.saveSettings))
+
+		r.Get("/employees", s.h(s.listEmployees))
+		r.Post("/employees", s.h(s.createEmployee))
+		r.Get("/employees/{id}", s.h(s.getEmployee))
+		r.Patch("/employees/{id}", s.h(s.updateEmployee))
+		r.Delete("/employees/{id}", s.h(s.deleteEmployee))
+		r.Put("/employees/{id}/payroll", s.h(s.setPayroll))
+		r.Get("/employees/{id}/history", s.h(s.employeeHistory))
+		r.Get("/employees/{id}/documents", s.h(s.listDocuments))
+		r.Post("/employees/{id}/documents", s.hSized(maxUpload+1<<20, s.uploadDocument))
+		r.Get("/employees/{id}/documents/{doc}/file", s.h(s.downloadDocument))
+		r.Delete("/employees/{id}/documents/{doc}", s.h(s.deleteDocument))
+		r.Post("/employees/{id}/submit", s.h(s.submitForApproval))
+		r.Post("/employees/{id}/decision", s.h(s.decideApproval))
+		r.Post("/employees/{id}/offboard", s.h(s.offboardEmployee))
+		r.Get("/employees/{id}/agreements", s.h(s.listAgreements))
+		r.Post("/employees/{id}/agreements", s.h(s.createAgreement))
+		r.Patch("/employees/{id}/agreements/{aid}", s.h(s.updateAgreement))
+		r.Post("/employees/{id}/agreements/{aid}/send", s.h(s.sendAgreement))
+		r.Post("/employees/{id}/agreements/{aid}/void", s.h(s.voidAgreement))
+
+		r.Get("/projects", s.h(s.listProjects))
+		r.Post("/projects", s.h(s.createProject))
+		r.Get("/projects/{id}", s.h(s.getProject))
+		r.Patch("/projects/{id}", s.h(s.updateProject))
+		r.Delete("/projects/{id}", s.h(s.deleteProject))
+		r.Get("/projects/{id}/updates", s.h(s.projectUpdates))
+		r.Post("/projects/{id}/updates", s.h(s.postProjectUpdate))
+		r.Post("/projects/{id}/members", s.h(s.addProjectMember))
+		r.Patch("/projects/{id}/members/{eid}", s.h(s.updateProjectMember))
+		r.Delete("/projects/{id}/members/{eid}", s.h(s.removeProjectMember))
+
+		r.Get("/tickets", s.h(s.listTickets))
+		r.Post("/tickets", s.h(s.createTicket))
+		r.Get("/tickets/{id}", s.h(s.getTicket))
+		r.Patch("/tickets/{id}", s.h(s.updateTicket))
+		r.Delete("/tickets/{id}", s.h(s.deleteTicket))
+		r.Get("/tickets/{id}/comments", s.h(s.ticketComments))
+		r.Post("/tickets/{id}/comments", s.h(s.addTicketComment))
+
+		// Candidate-facing agreement signing: authenticated by the link's secret token.
+		r.Get("/public/agreements/{token}", s.pub(s.publicAgreement))
+		r.Post("/public/agreements/{token}/sign", s.pub(s.signAgreement))
 	})
 	return r
 }
@@ -119,6 +162,7 @@ type call struct {
 	W        http.ResponseWriter
 	R        *http.Request
 	P        *Principal
+	as       string // actor name on public (token-authenticated) calls
 	notified int
 }
 
@@ -135,9 +179,12 @@ func errf(code int, f string, a ...any) error {
 }
 
 // h wraps a handler with authentication and error mapping.
-func (s *Server) h(fn func(*call) error) http.HandlerFunc {
+func (s *Server) h(fn func(*call) error) http.HandlerFunc { return s.hSized(1<<20, fn) }
+
+// hSized is h with a custom request body limit (file uploads).
+func (s *Server) hSized(limit int64, fn func(*call) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		c := &call{s: s, W: w, R: r}
 		p, err := s.authenticate(r)
 		if err == nil {
@@ -145,6 +192,17 @@ func (s *Server) h(fn func(*call) error) http.HandlerFunc {
 			err = fn(c)
 		}
 		if err != nil {
+			s.writeErr(w, r, err)
+		}
+	}
+}
+
+// pub wraps an unauthenticated handler (the call has no principal).
+func (s *Server) pub(fn func(*call) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		w.Header().Set("X-Robots-Tag", "noindex")
+		if err := fn(&call{s: s, W: w, R: r}); err != nil {
 			s.writeErr(w, r, err)
 		}
 	}
@@ -196,6 +254,8 @@ func (s *Server) writeErr(w http.ResponseWriter, r *http.Request, err error) {
 		code, msg = he.code, he.msg
 	case errors.Is(err, store.ErrNotFound):
 		code, msg = 404, "Not found."
+	case errors.Is(err, store.ErrConflict):
+		code, msg = 409, "That already exists."
 	case errors.As(err, &mbe):
 		code, msg = 413, "Request too large."
 	case errors.As(err, &ke):
@@ -353,9 +413,20 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
+func (c *call) actor() (id, name string) {
+	if c.P == nil {
+		if c.as != "" {
+			return "", c.as
+		}
+		return "", "Candidate"
+	}
+	return c.P.ID, c.P.Name
+}
+
 func (c *call) audit(action, targetType, targetID, targetName, summary string, details map[string]any) {
+	actorID, actor := c.actor()
 	err := c.s.st.AddAudit(c.ctx(), store.AuditEntry{
-		ActorID: c.P.ID, Actor: c.P.Name, Action: action, TargetType: targetType, TargetID: targetID,
+		ActorID: actorID, Actor: actor, Action: action, TargetType: targetType, TargetID: targetID,
 		TargetName: targetName, Summary: summary, Details: details, IP: clientIP(c.R),
 	})
 	if err != nil {
@@ -363,36 +434,86 @@ func (c *call) audit(action, targetType, targetID, targetName, summary string, d
 	}
 }
 
+// recipient is anyone TEMS emails: a sign-in account, an employee or a candidate.
+type recipient struct {
+	Email, Name, First, Username, UserID string
+}
+
+func userRcpt(u *kc.User) recipient {
+	return recipient{Email: u.Email, Name: u.FullName(), First: u.FirstName, Username: u.Username, UserID: u.ID}
+}
+
 // notify queues an email to each affected user (if the event is enabled) and
 // counts it for the X-TEMS-Notified response header.
 func (c *call) notify(ev string, users []*kc.User, data func(u *kc.User) mail.Data, force bool) {
-	if !force && !c.s.Settings().Notifications[ev] {
+	rs := make([]recipient, 0, len(users))
+	byID := map[string]*kc.User{}
+	for _, u := range users {
+		if u != nil {
+			rs = append(rs, userRcpt(u))
+			byID[u.ID] = u
+		}
+	}
+	var fn func(recipient) mail.Data
+	if data != nil {
+		fn = func(r recipient) mail.Data { return data(byID[r.UserID]) }
+	}
+	c.notifyTo(ev, rs, fn, force)
+}
+
+// notifyTo is notify for arbitrary recipients (employees and candidates need no account).
+func (c *call) notifyTo(ev string, rs []recipient, data func(r recipient) mail.Data, force bool) {
+	if !force && !mail.Forced[ev] && !c.s.Settings().Notifications[ev] {
 		return
 	}
-	for _, u := range users {
-		if u == nil || u.Email == "" {
+	_, actor := c.actor()
+	seen := map[string]bool{}
+	sent := 0
+	for _, r := range rs {
+		key := strings.ToLower(r.Email)
+		if r.Email == "" || seen[key] {
 			continue
 		}
+		seen[key] = true
 		d := mail.Data{}
 		if data != nil {
-			d = data(u)
+			d = data(r)
 		}
-		d.Origin, d.FirstName, d.Username, d.Actor = c.s.cfg.PublicURL, u.FirstName, u.Username, c.P.Name
+		d.Origin, d.FirstName, d.Username, d.Actor = c.s.cfg.PublicURL, r.First, r.Username, actor
 		subject, html, text := mail.Render(ev, d)
-		uid := u.ID
+		var uid *string
+		if r.UserID != "" {
+			id := r.UserID
+			uid = &id
+		}
 		err := c.s.st.Enqueue(c.ctx(), store.MailItem{
-			To: u.Email, ToName: u.FullName(), UserID: &uid, Subject: subject, Event: ev,
-			TriggeredBy: c.P.Name, HTML: html, Text: text,
+			To: r.Email, ToName: r.Name, UserID: uid, Subject: subject, Event: ev,
+			TriggeredBy: actor, HTML: html, Text: text,
 		})
 		if err != nil {
-			slog.Error("enqueue mail", "to", u.Email, "err", err)
+			slog.Error("enqueue mail", "to", r.Email, "err", err)
 			continue
 		}
-		c.notified++
+		sent++
 	}
-	if c.notified > 0 {
+	c.notified += sent
+	if sent > 0 {
 		c.s.mailer.Kick()
 	}
+}
+
+// others drops the acting user from a recipient list (nobody is emailed about their own action).
+func (c *call) others(rs []recipient) []recipient {
+	if c.P == nil {
+		return rs
+	}
+	out := rs[:0:0]
+	for _, r := range rs {
+		if r.UserID != c.P.ID && !strings.EqualFold(r.Email, c.P.Email) {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func one(u *kc.User) []*kc.User { return []*kc.User{u} }

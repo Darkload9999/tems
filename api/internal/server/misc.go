@@ -21,9 +21,13 @@ func (s *Server) me(c *call) error {
 		perms = append(perms, p)
 	}
 	sort.Strings(perms)
+	var employeeID *string
+	if e := c.myEmployee(); e != nil {
+		employeeID = &e.ID
+	}
 	return c.JSON(200, map[string]any{
 		"id": c.P.ID, "username": c.P.Username, "name": c.P.Name, "email": c.P.Email,
-		"superAdmin": c.P.Super, "permissions": perms, "groups": nz(c.P.Groups),
+		"superAdmin": c.P.Super, "permissions": perms, "groups": nz(c.P.Groups), "employeeId": employeeID,
 	})
 }
 
@@ -50,6 +54,14 @@ func (s *Server) stats(c *call) error {
 	if err != nil {
 		return err
 	}
+	ec, err := s.st.EmployeeCounts(c.ctx())
+	if err != nil {
+		return err
+	}
+	pc, err := s.st.ProjectCounts(c.ctx())
+	if err != nil {
+		return err
+	}
 	sessions := 0
 	var stats []map[string]any
 	if _, err := s.kc.Do(c.ctx(), http.MethodGet, "/client-session-stats", nil, &stats); err == nil {
@@ -63,6 +75,8 @@ func (s *Server) stats(c *call) error {
 		"groups": len(sn.Groups), "permissions": len(sn.Perms), "customPermissions": custom,
 		"mailSent24h": sent24, "mailFailed": failed, "mailQueued": queued,
 		"sessions": sessions, "superAdmins": len(sn.Supers),
+		"employees": ec.Total, "onboarding": ec.Onboarding, "pendingApproval": ec.PendingApproval,
+		"activeProjects": pc.Active, "openTickets": pc.OpenTickets,
 	})
 }
 
@@ -210,7 +224,10 @@ type Settings struct {
 	Notifications      map[string]bool `json:"notifications"`
 	SessionIdleMinutes int             `json:"sessionIdleMinutes"`
 	PasswordMinLength  int             `json:"passwordMinLength"`
+	RequiredDocuments  []string        `json:"requiredDocuments"`
 }
+
+var defaultRequiredDocs = []string{"birth_certificate", "nic", "education"}
 
 func (s *Server) defaults() Settings {
 	n := map[string]bool{}
@@ -219,7 +236,7 @@ func (s *Server) defaults() Settings {
 	}
 	return Settings{
 		OrgName: "Techzaz Networks", MailFromName: s.cfg.MailFromName, MailFrom: s.cfg.MailFrom, ReplyTo: "soc@techzaz.lk",
-		Notifications: n, SessionIdleMinutes: 30, PasswordMinLength: 10,
+		Notifications: n, SessionIdleMinutes: 30, PasswordMinLength: 10, RequiredDocuments: defaultRequiredDocs,
 	}
 }
 
@@ -234,6 +251,9 @@ func (s *Server) LoadSettings(ctx context.Context) error {
 		if _, ok := st.Notifications[e]; !ok {
 			st.Notifications[e] = true
 		}
+	}
+	if st.RequiredDocuments == nil {
+		st.RequiredDocuments = defaultRequiredDocs
 	}
 	if !found {
 		if err := s.st.SaveSettings(ctx, st); err != nil {
@@ -311,7 +331,20 @@ func (s *Server) saveSettings(c *call) error {
 			clean.Notifications[k] = v
 		}
 	}
-	clean.Notifications["mail.direct"] = true
+	for k := range tmail.Forced {
+		clean.Notifications[k] = true
+	}
+	clean.RequiredDocuments = []string{}
+	seen := map[string]bool{}
+	for _, d := range in.RequiredDocuments {
+		if docLabels[d] == "" {
+			return errf(400, "Unknown document type %q.", d)
+		}
+		if !seen[d] {
+			seen[d] = true
+			clean.RequiredDocuments = append(clean.RequiredDocuments, d)
+		}
+	}
 	clean.OrgName, clean.MailFromName, clean.MailFrom, clean.ReplyTo = strings.TrimSpace(in.OrgName), strings.TrimSpace(in.MailFromName), in.MailFrom, in.ReplyTo
 	clean.SessionIdleMinutes, clean.PasswordMinLength = in.SessionIdleMinutes, in.PasswordMinLength
 
@@ -340,6 +373,9 @@ func (s *Server) saveSettings(c *call) error {
 	}
 	if old.SessionIdleMinutes != clean.SessionIdleMinutes || old.PasswordMinLength != clean.PasswordMinLength {
 		changed = append(changed, "security policy")
+	}
+	if strings.Join(old.RequiredDocuments, ",") != strings.Join(clean.RequiredDocuments, ",") {
+		changed = append(changed, "required documents")
 	}
 	for k, v := range clean.Notifications {
 		if old.Notifications[k] != v {

@@ -1,0 +1,8 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import Skeleton from '../../components/Skeleton.astro';
+---
+<!-- No page-level permission: project members open their own projects from My work. -->
+<Admin title="Projects" mega="PROJECTS." sub="Teams, status updates and ticket boards for every engagement." page="projects">
+  <Skeleton />
+</Admin>

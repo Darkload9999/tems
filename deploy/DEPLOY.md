@@ -88,9 +88,11 @@ Want aggregate DMARC reports? Re-run with `DMARC_RUA=dmarc@techzaz.lk` and use t
 | Update | `git pull && docker compose up -d --build` |
 | Logs | `docker compose logs -f api` (or `keycloak`, `mail`, `web`) |
 | Mail queue | `docker compose exec mail postqueue -p` |
-| Backup | `./scripts/backup.sh` (dumps both databases + DKIM key to `backups/`) |
+| Backup | `./scripts/backup.sh` (dumps both databases, which include every uploaded employee document and signed agreement, plus the DKIM key, to `backups/`) |
 | Nightly backup | `crontab -e` → `17 3 * * * /opt/tems/scripts/backup.sh` and copy `backups/` off the host |
 | Restore a DB | `docker compose exec -T db pg_restore -U postgres --clean -d tems < backups/<ts>/tems.dump` |
+
+Backups contain salary details and identity documents: keep `backups/` encrypted and off the web server's public paths.
 
 Keep the DKIM key with your backups: if you lose the `mail_dkim` volume, a new key
 is generated and the DKIM DNS record has to be replaced.

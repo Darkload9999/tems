@@ -78,7 +78,13 @@ CREATE TABLE IF NOT EXISTS settings (
   id    int PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   value jsonb NOT NULL
 );`)
-	return err
+	if err != nil {
+		return err
+	}
+	if err := s.migrateHR(ctx); err != nil {
+		return err
+	}
+	return s.migrateProjects(ctx)
 }
 
 /* ---------- member denies ---------- */

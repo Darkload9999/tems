@@ -1,13 +1,14 @@
 import type { PageCtx } from '../app';
-import type { NotifyEvent, Settings, User } from '../types';
+import type { DocCategory, NotifyEvent, Settings, User } from '../types';
 import { DEMO } from '../auth';
-import { EVENTS } from '../email';
+import { EVENTS, FORCED } from '../email';
+import { DOCS, DOC_ORDER } from '../hr';
 import { $, $$, avatar, confirmDanger, fullName, html, ico, mount, on, toast } from '../ui';
 
 export default async function settings({ api, me, main, ctx, cleanup, refreshShell }: PageCtx) {
   let saved: Settings = await api.getSettings();
   let draft: Settings = structuredClone(saved);
-  const events = (Object.keys(EVENTS) as NotifyEvent[]).filter((e) => e !== 'mail.direct');
+  const events = (Object.keys(EVENTS) as NotifyEvent[]).filter((e) => !FORCED.includes(e));
   const eventGroups = [...new Set(events.map((e) => EVENTS[e].group))];
 
   const dirty = () => JSON.stringify(draft) !== JSON.stringify(saved);
@@ -32,10 +33,17 @@ export default async function settings({ api, me, main, ctx, cleanup, refreshShe
         </div>
       </section>
 
+      <section class="panel reveal" style="--i:2" id="onboarding">
+        <div class="panel-head"><div><span class="eyebrow">Employees</span><h3 style="margin-top:2px">Required onboarding documents</h3></div></div>
+        <p class="muted" style="margin:-4px 0 14px">HR must upload these before an employee can be submitted for approval.</p>
+        <div class="doc-picks">${DOC_ORDER.filter((k) => k !== 'agreement').map((k) => html`
+          <label class="check-row"><input type="checkbox" data-doc="${k}"> ${DOCS[k].label}${DOCS[k].payroll ? html` <span class="tag">payroll</span>` : ''}</label>`)}</div>
+      </section>
+
       <section class="panel reveal" style="--i:2" id="notifications">
         <div class="panel-head"><div><span class="eyebrow">Affected users</span><h3 style="margin-top:2px">Notification emails</h3></div>
           <div style="display:flex;gap:6px"><button type="button" class="btn ghost sm" data-allev="1">All on</button><button type="button" class="btn ghost sm" data-allev="0">All off</button></div></div>
-        <p class="muted" style="margin:-4px 0 14px">Choose which admin actions email the people they affect. Direct messages from Compose are always delivered.</p>
+        <p class="muted" style="margin:-4px 0 14px">Choose which actions email the people they affect. Direct messages from Compose and agreement signing links are always delivered.</p>
         ${eventGroups.map((grp) => html`
           <div class="perm-cat"><div class="perm-cat-head"><h4>${grp}</h4></div>
             ${events.filter((e) => EVENTS[e].group === grp).map((e) => html`
@@ -63,6 +71,7 @@ export default async function settings({ api, me, main, ctx, cleanup, refreshShe
   const fill = () => {
     $$<HTMLInputElement>('[data-k]', main).forEach((i) => (i.value = String(draft[i.dataset.k as keyof Settings] ?? '')));
     $$<HTMLInputElement>('[data-ev]', main).forEach((i) => (i.checked = !!draft.notifications[i.dataset.ev as NotifyEvent]));
+    $$<HTMLInputElement>('[data-doc]', main).forEach((i) => (i.checked = draft.requiredDocuments.includes(i.dataset.doc as DocCategory)));
   };
   const drawBar = () => mount($('#sbar', main), dirty() ? html`
     <div class="savebar"><span>${ico('info', 'inline-ico')} <b>Unsaved settings</b></span><span class="spacer"></span>
@@ -72,6 +81,10 @@ export default async function settings({ api, me, main, ctx, cleanup, refreshShe
     const k = el.dataset.k as keyof Settings;
     const v = (el as HTMLInputElement).value;
     (draft as unknown as Record<string, unknown>)[k] = el.hasAttribute('data-num') ? Number(v) : v;
+    drawBar();
+  });
+  on(main, 'change', '[data-doc]', () => {
+    draft.requiredDocuments = $$<HTMLInputElement>('[data-doc]', main).filter((i) => i.checked).map((i) => i.dataset.doc as DocCategory);
     drawBar();
   });
   on(main, 'change', '[data-ev]', (_e, el) => { draft.notifications[el.dataset.ev as NotifyEvent] = (el as HTMLInputElement).checked; drawBar(); });
@@ -126,7 +139,7 @@ export default async function settings({ api, me, main, ctx, cleanup, refreshShe
   mount(ctx, html`
     <div class="ctx-card">
       <div class="ctx-label">On This Page:</div>
-      <a href="#sender">Sender identity</a><a href="#security">Security policy</a><a href="#notifications">Notification emails</a><a href="#super-admins">Super administrators</a>
+      <a href="#sender">Sender identity</a><a href="#security">Security policy</a><a href="#onboarding">Onboarding documents</a><a href="#notifications">Notification emails</a><a href="#super-admins">Super administrators</a>
     </div>
     <div class="ctx-card">
       <div class="ctx-label">Where it applies:</div>

@@ -19,8 +19,27 @@ export const EVENTS: Record<NotifyEvent, { label: string; desc: string; group: s
   'group.renamed':             { group: 'Access',      label: 'Group renamed',             desc: 'Sent to every member of the group' },
   'group.deleted':             { group: 'Access',      label: 'Group deleted',             desc: 'Sent to every former member' },
   'member.permissions_changed':{ group: 'Access',      label: 'Personal permissions changed', desc: 'A member-level allow or deny was changed' },
+  'employee.onboarding_started': { group: 'Employees', label: 'Onboarding started',       desc: 'Welcome email to a new employee explaining the next steps' },
+  'employee.updated':          { group: 'Employees',   label: 'Employee record updated',   desc: 'HR changed details in the employee record' },
+  'employee.payroll_changed':  { group: 'Employees',   label: 'Payroll updated',           desc: 'Salary, EPF/ETF or bank details changed (amounts are never emailed)' },
+  'employee.document_added':   { group: 'Employees',   label: 'Document added',            desc: 'HR added a document to the employee file' },
+  'employee.approval_requested': { group: 'Employees', label: 'Approval requested',        desc: 'Sent to approvers when HR submits an employee' },
+  'employee.approved':         { group: 'Employees',   label: 'Onboarding approved',       desc: 'Sent to the HR member who submitted the employee' },
+  'employee.rejected':         { group: 'Employees',   label: 'Sent back for changes',     desc: 'Sent to the HR member who submitted the employee, with the note' },
+  'employee.offboarded':       { group: 'Employees',   label: 'Offboarded',                desc: 'Sent to the employee when their record is closed' },
+  'agreement.sent':            { group: 'Agreements',  label: 'Agreement to sign',         desc: 'The private signing link. Always sent.' },
+  'agreement.signed':          { group: 'Agreements',  label: 'Agreement signed',          desc: 'Confirmation to the employee and to the HR member who sent it' },
+  'project.assigned':          { group: 'Projects',    label: 'Assigned to a project',     desc: 'Includes the role on the project' },
+  'project.unassigned':        { group: 'Projects',    label: 'Removed from a project',    desc: '' },
+  'project.status_changed':    { group: 'Projects',    label: 'Project status update',     desc: 'Sent to the whole team when a status update is posted' },
+  'ticket.assigned':           { group: 'Tickets',     label: 'Ticket assigned',           desc: 'Sent to the new assignee' },
+  'ticket.updated':            { group: 'Tickets',     label: 'Ticket updated',            desc: 'Status, priority or due date changes, to the assignee and reporter' },
+  'ticket.commented':          { group: 'Tickets',     label: 'Ticket comment',            desc: 'New comments, to the assignee and reporter' },
   'mail.direct':               { group: 'Messages',    label: 'Direct messages',           desc: 'Messages composed by admins in the Mail section' },
 };
+
+/** Always delivered, whatever the notification settings say. */
+export const FORCED: NotifyEvent[] = ['mail.direct', 'agreement.sent'];
 
 export interface EmailData {
   origin: string;
@@ -35,6 +54,13 @@ export interface EmailData {
   setup?: 'link' | 'temporary';
   subject?: string;
   message?: string;
+  link?: string;      // call-to-action target (defaults to origin)
+  person?: string;    // the employee a staff-facing email is about
+  role?: string;
+  item?: string;      // document, agreement or ticket title
+  project?: string;
+  note?: string;
+  expires?: string;
 }
 
 interface Copy { subject: string; title: string; lead: string; body?: string; cta?: string; tone?: 'warn' | 'ok' }
@@ -93,6 +119,38 @@ function copyFor(ev: NotifyEvent, d: EmailData): Copy {
     case 'member.permissions_changed': return {
       subject: 'Your permissions changed', title: 'Access updated.',
       lead: 'An administrator changed your personal permissions:' };
+    case 'employee.onboarding_started': return {
+      subject: 'Welcome to Techzaz Networks', title: 'Welcome.', tone: 'ok',
+      lead: `Our HR team has started your onboarding at Techzaz Networks${d.role ? ` as <b>${esc(d.role)}</b>` : ''}.`,
+      body: "Next, HR will collect your documents (birth certificate, NIC and educational qualifications). After an approval, you will receive your employment agreement to review and sign online. You don't need to do anything yet." };
+    case 'employee.updated': return { subject: 'Your employee record was updated', title: 'Record updated.', lead: 'HR updated the following details in your employee record:' };
+    case 'employee.payroll_changed': return { subject: 'Your payroll details were updated', title: 'Payroll updated.', lead: 'HR updated your payroll details:', body: 'If anything looks wrong, contact HR.' };
+    case 'employee.document_added': return { subject: 'A document was added to your employee file', title: 'File updated.', lead: `HR added <b>${esc(d.item)}</b> to your employee file.` };
+    case 'employee.approval_requested': return {
+      subject: `Approval needed: ${d.person}`, title: 'Approval needed.', cta: 'Review in Techzaz EMS',
+      lead: `<b>${esc(d.actor)}</b> submitted <b>${esc(d.person)}</b>${d.role ? ` as <b>${esc(d.role)}</b>` : ''} for onboarding approval. All required documents are uploaded.` };
+    case 'employee.approved': return { subject: `${d.person} was approved`, title: 'Approved.', tone: 'ok', cta: 'Open employee',
+      lead: `The onboarding of <b>${esc(d.person)}</b> was approved. You can now send their employment agreement.` };
+    case 'employee.rejected': return { subject: `${d.person} needs changes`, title: 'Changes needed.', tone: 'warn', cta: 'Open employee',
+      lead: `The onboarding of <b>${esc(d.person)}</b> was sent back for changes.` };
+    case 'employee.offboarded': return { subject: 'Your employee record was closed', title: 'Farewell.', tone: 'warn',
+      lead: 'Your employee record at Techzaz Networks has been closed. Thank you for everything you contributed.' };
+    case 'agreement.sent': return {
+      subject: `Please review and sign: ${d.item}`, title: 'Your agreement.', tone: 'ok', cta: 'Review and sign',
+      lead: `Techzaz Networks has sent you <b>${esc(d.item)}</b> to review and sign online.`,
+      body: `Open the secure link below, read the agreement carefully, then sign in the signature box. The link is personal to you; please don't forward it.${d.expires ? ` It expires on ${d.expires}.` : ''}` };
+    case 'agreement.signed': return d.person
+      ? { subject: `${d.person} signed ${d.item}`, title: 'Signed.', tone: 'ok', cta: 'Open employee', lead: `<b>${esc(d.person)}</b> signed <b>${esc(d.item)}</b>. A signed copy was added to their employee file.` }
+      : { subject: `You signed ${d.item}`, title: 'Signed.', tone: 'ok', cta: 'View the signed agreement', lead: `Thank you. You signed <b>${esc(d.item)}</b>. A signed copy is kept in your employee file.` };
+    case 'project.assigned': return { subject: `You were added to ${d.project}`, title: 'New project.', tone: 'ok', cta: 'Open my work',
+      lead: `You were assigned to <b>${esc(d.project)}</b>${d.role ? ` as <b>${esc(d.role)}</b>` : ''}.` };
+    case 'project.unassigned': return { subject: `You were removed from ${d.project}`, title: 'Project left.', lead: `You are no longer assigned to <b>${esc(d.project)}</b>.` };
+    case 'project.status_changed': return { subject: `${d.project}: status update`, title: 'Status update.', cta: 'Open my work',
+      lead: `There is a new status update for <b>${esc(d.project)}</b>:` };
+    case 'ticket.assigned': return { subject: `Assigned to you: ${d.item}`, title: 'New ticket.', cta: 'Open ticket',
+      lead: `<b>${esc(d.actor)}</b> assigned you <b>${esc(d.item)}</b> in ${esc(d.project)}.` };
+    case 'ticket.updated': return { subject: `Updated: ${d.item}`, title: 'Ticket update.', cta: 'Open ticket', lead: `<b>${esc(d.item)}</b> in ${esc(d.project)} was updated:` };
+    case 'ticket.commented': return { subject: `New comment: ${d.item}`, title: 'New comment.', cta: 'Open ticket', lead: `<b>${esc(d.actor)}</b> commented on <b>${esc(d.item)}</b>:` };
     case 'mail.direct': return {
       subject: d.subject || 'Message from Techzaz EMS', title: 'Message.', lead: '' };
   }
@@ -131,9 +189,10 @@ export function renderEmail(ev: NotifyEvent, d: EmailData): { subject: string; h
   ${c.lead ? `<p style="margin:0 0 14px">${c.lead}</p>` : ''}
   ${message}
   ${listRows ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1ecfd;border-radius:12px;margin:4px 0 18px"><tr><td style="padding:14px 18px"><table role="presentation" cellpadding="0" cellspacing="0">${listRows}</table></td></tr></table>` : ''}
+  ${d.note ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px"><tr><td style="border-left:3px solid ${accent};background:#f7f4fd;border-radius:0 10px 10px 0;padding:12px 16px;font-size:14px;color:#3a3647">${esc(d.note).replace(/\n/g, '<br>')}</td></tr></table>` : ''}
   ${c.body ? `<p style="margin:0 0 14px">${esc(c.body)}</p>` : ''}
-  ${c.cta ? `<p style="margin:22px 0 22px"><a href="${esc(d.origin)}" style="display:inline-block;background:#22094d;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">${esc(c.cta)} &rarr;</a></p>` : ''}
-  <p style="margin:18px 0 0;padding-top:16px;border-top:1px solid #ece7f6;font-size:12.5px;color:#6d6884">${ev === 'mail.direct' ? 'Sent' : 'Changed'} by ${esc(d.actor)} · ${esc(when)}.<br>If you did not expect this email, contact <a href="mailto:soc@techzaz.lk" style="color:#5b3fd6">soc@techzaz.lk</a>.</p>
+  ${c.cta ? `<p style="margin:22px 0 22px"><a href="${esc(d.link || d.origin)}" style="display:inline-block;background:#22094d;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">${esc(c.cta)} &rarr;</a></p>` : ''}
+  <p style="margin:18px 0 0;padding-top:16px;border-top:1px solid #ece7f6;font-size:12.5px;color:#6d6884">${ev === 'mail.direct' || ev === 'agreement.sent' ? 'Sent' : 'Changed'} by ${esc(d.actor)} · ${esc(when)}.<br>If you did not expect this email, contact <a href="mailto:soc@techzaz.lk" style="color:#5b3fd6">soc@techzaz.lk</a>.</p>
 </td></tr>
 <tr><td style="padding:16px 30px 22px;font-size:11.5px;color:#9a95ad;line-height:1.6">Techzaz Networks · 476/2 Sri Rajasinghe Mawatha, Wattala 11104, Sri Lanka<br>This is an automated message from Techzaz EMS. Please do not reply.</td></tr>
 </table></td></tr></table></body></html>`;
@@ -143,8 +202,9 @@ export function renderEmail(ev: NotifyEvent, d: EmailData): { subject: string; h
     `Hi ${d.firstName || d.username || 'there'},`, '',
     strip(c.lead), ev === 'mail.direct' ? (d.message ?? '') : '',
     ...(d.added ?? []).map((x) => `+ ${x}`), ...(d.removed ?? []).map((x) => `- ${x}`), ...(d.changes ?? []).map((x) => `* ${x}`),
-    c.body ?? '', c.cta ? `${c.cta}: ${d.origin}` : '', '',
-    `${ev === 'mail.direct' ? 'Sent' : 'Changed'} by ${d.actor} · ${when}.`, 'Techzaz Networks — automated message from Techzaz EMS.',
+    d.note ? `> ${d.note.replace(/\n/g, '\n> ')}` : '',
+    c.body ?? '', c.cta ? `${c.cta}: ${d.link || d.origin}` : '', '',
+    `${ev === 'mail.direct' || ev === 'agreement.sent' ? 'Sent' : 'Changed'} by ${d.actor} · ${when}.`, 'Techzaz Networks — automated message from Techzaz EMS.',
   ].filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n');
 
   return { subject: c.subject, html, text };

@@ -29,6 +29,10 @@ const pages: Record<string, () => Promise<PageModule>> = {
   audit: () => import('./pages/audit'),
   settings: () => import('./pages/settings'),
   account: () => import('./pages/account'),
+  employees: () => import('./pages/employees'),
+  projects: () => import('./pages/projects'),
+  tickets: () => import('./pages/tickets'),
+  work: () => import('./pages/work'),
   notfound: () => import('./pages/notfound'),
 };
 
@@ -116,6 +120,7 @@ async function refreshCounts() {
       el.style.color = warn && v ? 'var(--err)' : '';
     });
     set('users', s.users); set('groups', s.groups); set('permissions', s.permissions); set('mailFailed', s.mailFailed, true);
+    set('pendingApproval', s.pendingApproval, true); set('openTickets', s.openTickets);
   } catch { /* counters are cosmetic */ }
 }
 
@@ -189,7 +194,8 @@ async function run() {
     renderFatal(main, err);
     return;
   }
-  const can = (p: string) => me.superAdmin || me.permissions.includes(p);
+  // "@employee" gates items on having a linked employee record (My work).
+  const can = (p: string) => (p === '@employee' ? !!me.employeeId : me.superAdmin || me.permissions.includes(p));
   canRef = can;
   applyShell(me, can);
   void refreshCounts();
