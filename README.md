@@ -20,11 +20,12 @@ Centralized authentication and mail management for Techzaz Networks.
 
 ## Status
 
-- [x] Console (`web/`) — complete; runs on built-in demo data (`PUBLIC_TEMS_DEMO=true`) until the API exists
+- [x] Console (`web/`): runs live, or on built-in demo data with `PUBLIC_TEMS_DEMO=true`
 - [x] Compose stack, env generator, Postgres init, Keycloak realm import
-- [ ] Go API (`api/`) — implements the contract in `web/src/lib/api.ts`
-- [ ] Keycloak login theme (`keycloak/themes/tems/`)
-- [ ] Deploy to `tems.techzaz.lk` + mail DNS (SPF / DKIM / DMARC)
+- [x] Go API (`api/`): implements the contract in `web/src/lib/api.ts`; verified end to end against Keycloak 26
+- [x] Keycloak login theme (`keycloak/themes/tems/`)
+- [x] Deploy kit: Caddy TLS front, mail DNS helper, backups ([`deploy/DEPLOY.md`](deploy/DEPLOY.md))
+- [ ] Go live on `tems.techzaz.lk` and publish SPF / DKIM / DMARC (follow `deploy/DEPLOY.md`)
 
 ## Console only (demo data)
 
@@ -35,9 +36,21 @@ docker build --build-arg PUBLIC_TEMS_DEMO=true -t tems-web:demo web
 docker run --rm -p 127.0.0.1:18088:8080 tems-web:demo
 ```
 
-## Full stack (once the API is in place)
+## Full stack
 
 ```bash
 ./scripts/init-env.sh          # writes .env with random secrets, prints the super admin password
 docker compose up -d --build   # http://localhost:8088
+```
+
+## Production
+
+See [`deploy/DEPLOY.md`](deploy/DEPLOY.md): server prerequisites, DNS (A, PTR, SPF, DKIM, DMARC),
+TLS with Caddy, and backups. `./scripts/mail-dns.sh` prints the exact records to publish and checks them.
+
+## Development checks
+
+```bash
+cd api && gofmt -l . && go vet ./... && go test ./...
+cd web && PUBLIC_TEMS_DEMO=false npm run build   # astro check + build
 ```

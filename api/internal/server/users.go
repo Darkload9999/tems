@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -81,6 +82,11 @@ func (c *call) passwordPolicy(pw string) error {
 func (s *Server) actionsEmail(c *call, uid string, actions []string) error {
 	q := url.Values{"lifespan": {"43200"}, "client_id": {s.cfg.KCAdminClient}, "redirect_uri": {s.cfg.PublicURL + "/"}}
 	_, err := s.kc.Do(c.ctx(), http.MethodPut, "/users/"+kc.P(uid)+"/execute-actions-email?"+q.Encode(), actions, nil)
+	if kc.IsStatus(err, http.StatusInternalServerError) {
+		// Keycloak sends this email itself and answers 500 when its SMTP hop fails.
+		slog.Error("keycloak could not send the actions email", "user", uid, "err", err)
+		return errf(502, "The sign-in service couldn't send the email. Check that the mail service is running, or set a temporary password instead.")
+	}
 	return err
 }
 

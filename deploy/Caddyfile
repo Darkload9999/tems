@@ -1,0 +1,17 @@
+# Techzaz EMS public TLS front. Caddy gets and renews the Let's Encrypt
+# certificate and forwards everything to the web gateway, which compose binds to
+# 127.0.0.1:8088. Install as /etc/caddy/Caddyfile, then: systemctl reload caddy
+#
+# Caddy sets X-Forwarded-Proto/For itself (and ignores client-supplied ones), so
+# Keycloak issues https URLs and the audit log records real client IPs.
+
+tems.techzaz.lk {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	reverse_proxy 127.0.0.1:8088
+}
