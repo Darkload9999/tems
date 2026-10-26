@@ -1,0 +1,56 @@
+---
+import { icon } from '../lib/icons';
+
+const DEMO = import.meta.env.PUBLIC_TEMS_DEMO !== 'false';
+
+interface Link { href: string; label: string; icon: string; perm?: string; count?: string }
+const sections: { label: string; links: Link[] }[] = [
+  { label: 'Overview', links: [
+    { href: '/', label: 'Dashboard', icon: 'grid', perm: 'dashboard:view' },
+  ]},
+  { label: 'Directory', links: [
+    { href: '/users/', label: 'Users', icon: 'users', perm: 'users:view', count: 'users' },
+    { href: '/groups/', label: 'Groups', icon: 'group', perm: 'groups:view', count: 'groups' },
+  ]},
+  { label: 'Access', links: [
+    { href: '/permissions/', label: 'Permissions', icon: 'shield', perm: 'permissions:view', count: 'permissions' },
+  ]},
+  { label: 'Mail', links: [
+    { href: '/mail/', label: 'Outbox', icon: 'inbox', perm: 'mail:view', count: 'mailFailed' },
+    { href: '/mail/compose/', label: 'Compose', icon: 'send', perm: 'mail:send' },
+  ]},
+  { label: 'System', links: [
+    { href: '/audit/', label: 'Audit log', icon: 'history', perm: 'audit:view' },
+    { href: '/settings/', label: 'Settings', icon: 'settings', perm: 'settings:manage' },
+  ]},
+  { label: 'You', links: [
+    { href: '/account/', label: 'My account', icon: 'user' },
+  ]},
+];
+---
+<aside class="sidebar" id="sidebar" transition:persist="sidebar" aria-label="Main navigation">
+  <div class="sidebar-inner">
+    <div class="sb-top">
+      {DEMO
+        ? <span class="env-pill demo" title="Running on built-in demo data"><span class="dot"></span>Demo data</span>
+        : <span class="env-pill" title="Connected to the live API"><span class="dot"></span>v1 · live</span>}
+      <label class="switch" title="Dark mode">
+        <input type="checkbox" id="themeSwitch" aria-label="Dark mode" />
+        <span class="track"></span>
+      </label>
+    </div>
+
+    {sections.map((s) => (
+      <div class="sb-section" data-section>
+        <div class="sb-label">{s.label}</div>
+        {s.links.map((l) => (
+          <a class="sb-link" href={l.href} data-perm={l.perm} data-nav={l.href}>
+            <Fragment set:html={icon(l.icon)} />
+            <span>{l.label}</span>
+            {l.count && <span class="count" data-count={l.count}></span>}
+          </a>
+        ))}
+      </div>
+    ))}
+  </div>
+</aside>

@@ -1,0 +1,9 @@
+---
+// Placeholder shown until the page module renders live data.
+const { rows = 6 } = Astro.props as { rows?: number };
+---
+<div aria-busy="true" aria-label="Loading">
+  <div class="skel" style="height:32px;width:min(380px,60%);margin-bottom:10px"></div>
+  <div class="skel" style="height:14px;width:min(520px,80%);margin-bottom:26px"></div>
+  {Array.from({ length: rows }).map(() => <div class="skel" style="height:46px;margin-bottom:8px"></div>)}
+</div>

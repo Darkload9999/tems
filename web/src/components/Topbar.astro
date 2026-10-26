@@ -1,0 +1,33 @@
+---
+import { icon } from '../lib/icons';
+---
+<header class="topbar" transition:persist="topbar">
+  <div style="display:flex;align-items:flex-start;gap:6px">
+    <button class="icon-btn burger" id="burger" aria-label="Open navigation" style="margin-top:20px;color:#fff" set:html={icon('menu')} />
+    <a href="/" class="wordmark" aria-label="Techzaz EMS home">
+      <img src="/brand/logo-mark.png" alt="" width="42" height="30" />
+      <span><span class="wm-thin">TECHZAZ</span><span class="wm-plus">+</span><span class="wm-bold">EMS</span></span>
+    </a>
+  </div>
+
+  <nav class="toppanel" aria-label="Quick links">
+    <a class="tp-link" href="/">Console</a>
+    <a class="tp-link" href="/account/">Account</a>
+    <a class="icon-btn" href="/mail/" data-perm="mail:view" title="Outbox" aria-label="Outbox" set:html={icon('inbox')} />
+    <a class="icon-btn" href="/audit/" data-perm="audit:view" title="Audit log" aria-label="Audit log" set:html={icon('history')} />
+    <button class="me-chip" id="meChip" aria-haspopup="menu" aria-expanded="false">
+      <span class="avatar" id="meAvatar" style="width:30px;height:30px;border-radius:999px;font-size:11px">··</span>
+      <span class="who"><b id="meName">Signing in…</b><span id="meRole">&nbsp;</span></span>
+    </button>
+  </nav>
+
+  <div class="menu" id="meMenu" role="menu" hidden>
+    <div class="menu-head"><b id="menuName"></b><span id="menuEmail"></span></div>
+    <hr />
+    <a class="mi" href="/account/" role="menuitem"><Fragment set:html={icon('user')} /> My account</a>
+    <a class="mi" id="kcAccount" href="#" target="_blank" rel="noopener" role="menuitem"><Fragment set:html={icon('lock')} /> Password &amp; security</a>
+    <button class="mi" id="viewAs" role="menuitem" hidden><Fragment set:html={icon('eye')} /> View as another user…</button>
+    <hr />
+    <button class="mi" id="signOut" role="menuitem"><Fragment set:html={icon('logout')} /> Sign out</button>
+  </div>
+</header>
