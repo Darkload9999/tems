@@ -6,6 +6,8 @@
 #   api ──SMTP──► mail (Postfix + OpenDKIM, direct-to-MX delivery)
 #
 # Bring up:  ./scripts/init-env.sh && docker compose up -d --build
+# Deploys:   pushes to main are built by GitHub Actions and rolled out with
+#            scripts/deploy.sh (see deploy/DEPLOY.md, "Continuous deployment")
 name: tems
 
 x-logging: &logging
@@ -87,7 +89,8 @@ services:
 
   api:
     build: ./api
-    image: tems-api:latest
+    # CI/CD deploys prebuilt images: TEMS_IMAGE_PREFIX=ghcr.io/<owner>/tems, TEMS_TAG=<commit>
+    image: ${TEMS_IMAGE_PREFIX:-tems}-api:${TEMS_TAG:-latest}
     container_name: tems-api
     restart: unless-stopped
     environment:
@@ -124,7 +127,7 @@ services:
       context: ./web
       args:
         PUBLIC_TEMS_DEMO: ${TEMS_DEMO:-false}   # true = console runs on built-in demo data
-    image: tems-web:latest
+    image: ${TEMS_IMAGE_PREFIX:-tems}-web:${TEMS_TAG:-latest}
     container_name: tems-web
     restart: unless-stopped
     ports:

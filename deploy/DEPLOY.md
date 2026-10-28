@@ -85,7 +85,8 @@ Want aggregate DMARC reports? Re-run with `DMARC_RUA=dmarc@techzaz.lk` and use t
 
 | Task | Command |
 |------|---------|
-| Update | `git pull && docker compose up -d --build` |
+| Update | Automatic on every push to `main` once continuous deployment is set up (section 6). By hand: `git pull && docker compose up -d --build` |
+| Roll back | `./scripts/deploy.sh <older-tag>` (tags are the first 12 characters of a commit SHA; see the repository's Packages) |
 | Logs | `docker compose logs -f api` (or `keycloak`, `mail`, `web`) |
 | Mail queue | `docker compose exec mail postqueue -p` |
 | Backup | `./scripts/backup.sh` (dumps both databases, which include every uploaded employee document and signed agreement, plus the DKIM key, to `backups/`) |
@@ -106,3 +107,50 @@ docker compose exec keycloak /opt/keycloak/bin/kcadm.sh config credentials \
   --server http://localhost:8080/auth --realm master --user kcadmin --password '<KC_BOOTSTRAP_ADMIN_PASSWORD>'
 docker compose exec keycloak /opt/keycloak/bin/kcadm.sh get realms/tems
 ```
+
+## 6. Continuous deployment (GitHub Actions)
+
+`.github/workflows/ci.yml` checks every push and pull request (Go tests, console build, Compose config,
+shellcheck). For a push to `main` that passes, it builds `ghcr.io/darkload9999/tems-api` and `tems-web`
+tagged with the commit and runs `scripts/deploy.sh` on the server over SSH. The script pulls the new
+images, restarts the stack and waits until it is healthy. If the new version isn't healthy, it rolls
+back to the previous tag and the run fails. **Run workflow** on `main` (Actions → CI/CD) redeploys the
+current commit.
+
+One-time setup:
+
+1. On the server (after section 3, so `/opt/tems/.env` exists), create a deploy user that can run Docker:
+
+   ```bash
+   adduser --disabled-password --gecos "" deploy && usermod -aG docker deploy && chown -R deploy:deploy /opt/tems
+   ```
+
+2. On your computer, make a key pair for GitHub and allow it on the server:
+
+   ```bash
+   ssh-keygen -t ed25519 -N "" -C tems-deploy -f tems-deploy
+   ```
+
+   Append `tems-deploy.pub` to `/home/deploy/.ssh/authorized_keys` on the server.
+
+3. Record the server's host key: `ssh-keyscan -H tems.techzaz.lk`
+
+4. In GitHub, go to **Settings → Environments → New environment**, name it `production` and add:
+
+   | Kind | Name | Value |
+   |------|------|-------|
+   | Secret | `DEPLOY_HOST` | `tems.techzaz.lk` (or the server IP) |
+   | Secret | `DEPLOY_USER` | `deploy` |
+   | Secret | `DEPLOY_SSH_KEY` | contents of the private key `tems-deploy` |
+   | Secret | `DEPLOY_KNOWN_HOSTS` | output of step 3 |
+   | Secret (optional) | `DEPLOY_PORT` | SSH port, if not 22 |
+   | Variable | `PUBLIC_URL` | `https://tems.techzaz.lk` (turns on the post-deploy smoke test) |
+   | Variable (optional) | `DEPLOY_PATH` | install path, if not `/opt/tems` |
+
+   Optional: under the environment, add **Required reviewers** to approve each deploy, and limit
+   **Deployment branches** to `main`.
+
+Until these secrets exist, pushes to `main` still build and publish the images, and the deploy job is
+skipped with a warning. The deploy job signs in to GHCR on the server with the run's own token and signs
+out afterwards, so no registry password is stored. A rollback only swaps the images: Compose and realm
+files from the newer commit stay in place.

@@ -1,8 +1,16 @@
-name: CI
+name: CI/CD
 
+# Every push and pull request is checked (api, web, stack). A push to main that
+# passes every check is built into images on GHCR and deployed to the server
+# (environment "production"), which rolls back on its own if the new version
+# isn't healthy. "Run workflow" on main redeploys the current commit.
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   api:
@@ -37,3 +45,115 @@ jobs:
         run: ./scripts/init-env.sh && docker compose config --quiet
       - name: shell scripts parse
         run: for f in scripts/*.sh postgres/init/*.sh; do bash -n "$f"; done
+      - name: shellcheck
+        run: shellcheck -S warning scripts/*.sh
+
+  images:
+    name: build + push images
+    needs: [api, web, stack]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    outputs:
+      prefix: ${{ steps.meta.outputs.prefix }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        name: image names
+        run: |
+          echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: api image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./api
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.prefix }}-api:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.prefix }}-api:latest
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - name: web image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./web
+          push: true
+          build-args: PUBLIC_TEMS_DEMO=false
+          tags: |
+            ${{ steps.meta.outputs.prefix }}-web:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.prefix }}-web:latest
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+  deploy:
+    name: deploy to production
+    needs: images
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: read }
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_URL || 'https://tems.techzaz.lk' }}
+    concurrency: { group: production, cancel-in-progress: false }   # one deploy at a time, in push order
+    env:
+      HOST: ${{ secrets.DEPLOY_HOST }}
+      USER_NAME: ${{ secrets.DEPLOY_USER }}
+      PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+      DIR: ${{ vars.DEPLOY_PATH || '/opt/tems' }}
+      PREFIX: ${{ needs.images.outputs.prefix }}
+      TAG: ${{ needs.images.outputs.tag }}
+    steps:
+      - id: cfg
+        name: deploy configured?
+        run: |
+          if [[ -z "$HOST" || -z "$USER_NAME" ]]; then
+            echo "::warning title=Deploy skipped::Images ${PREFIX}-{api,web}:${TAG} are on GHCR, but the production environment has no DEPLOY_HOST / DEPLOY_USER / DEPLOY_SSH_KEY secrets yet. See deploy/DEPLOY.md, 'Continuous deployment'."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.enabled == 'true'
+
+      - name: SSH key + known host
+        if: steps.cfg.outputs.enabled == 'true'
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          if [[ -n "$KNOWN_HOSTS" ]]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::DEPLOY_KNOWN_HOSTS is not set; trusting the host key scanned now. Set it to pin the server's key."
+            ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts
+          fi
+          printf 'Host prod\n  HostName %s\n  User %s\n  Port %s\n  IdentityFile ~/.ssh/deploy\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n  ServerAliveInterval 30\n' \
+            "$HOST" "$USER_NAME" "$PORT" > ~/.ssh/config
+
+      - name: sync stack files
+        if: steps.cfg.outputs.enabled == 'true'
+        # compose file, realm import, login theme, DB init and scripts; .env and data stay on the server
+        run: |
+          # shellcheck disable=SC2029  # $DIR is meant to expand here, on the runner
+          tar czf - docker-compose.yml keycloak postgres scripts deploy | ssh prod "mkdir -p '$DIR' && tar xzf - -C '$DIR'"
+
+      - name: roll out ${{ needs.images.outputs.tag }}
+        if: steps.cfg.outputs.enabled == 'true'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # shellcheck disable=SC2029  # $DIR/$TAG/$PREFIX expand on the runner; \$s on the server
+          printf '%s' "$GHCR_TOKEN" | ssh prod "docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null \
+            && cd '$DIR' && ./scripts/deploy.sh '$TAG' '$PREFIX'; s=\$?; docker logout ghcr.io >/dev/null; exit \$s"
+
+      - name: smoke test
+        if: steps.cfg.outputs.enabled == 'true' && vars.PUBLIC_URL != ''
+        run: curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "${{ vars.PUBLIC_URL }}/healthz"
