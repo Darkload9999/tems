@@ -10,7 +10,7 @@ import type {
 } from './types';
 import type { Api, AuditQuery, MailQuery, PublicApi, UserQuery } from './api';
 import {
-  DEFAULT_MAILBOX, DEFAULT_SIGNATURE_FOR, DEFAULT_SIGNATURES, EVENTS, FORCED, renderEmail, signatureCategory, type EmailData,
+  DEFAULT_FOOTER, DEFAULT_MAILBOX, DEFAULT_SIGNATURE_FOR, DEFAULT_SIGNATURES, EVENTS, FORCED, renderEmail, signatureCategory, type EmailData,
 } from './email';
 import { demoAs } from './auth';
 import { DOCS, EMPLOYMENT, HEALTH, PRIORITY, PROJECT_STATUS, TICKET_ORDER, TICKET_STATUS, TICKET_TYPE } from './hr';
@@ -158,6 +158,7 @@ function seed(): State {
     requiredDocuments: ['birth_certificate', 'nic', 'education'],
     signatures: clone(DEFAULT_SIGNATURES),
     signatureFor: { ...DEFAULT_SIGNATURE_FOR },
+    signatureFooter: { ...DEFAULT_FOOTER },
     mailbox: { ...DEFAULT_MAILBOX },
   };
 
@@ -212,7 +213,8 @@ function load(): State {
     if (raw) {
       const s = JSON.parse(raw) as State;
       // state saved before signatures and Outlook setup existed
-      s.settings.signatures ??= clone(DEFAULT_SIGNATURES);
+      if (!s.settings.signatures?.every((x) => x.name)) s.settings.signatures = clone(DEFAULT_SIGNATURES); // pre name/title drafts
+      s.settings.signatureFooter ??= { ...DEFAULT_FOOTER };
       s.settings.signatureFor ??= { ...DEFAULT_SIGNATURE_FOR };
       s.settings.mailbox ??= { ...DEFAULT_MAILBOX };
       s.settings.notifications['mailbox.setup'] ??= true;
@@ -297,7 +299,7 @@ function notifyTo(ev: NotifyEvent, rs: Rcpt[], data: (r: Rcpt) => Partial<EmailD
     seen.add(lc(u.email));
     const cat = signatureCategory(ev);
     const signature = cat ? S.settings.signatures.find((x) => x.id === S.settings.signatureFor[cat]) ?? null : null;
-    const r = renderEmail(ev, { origin: location.origin, firstName: u.first, username: u.username, actor, signature, ...data(u) });
+    const r = renderEmail(ev, { origin: location.origin, firstName: u.first, username: u.username, actor, signature, footer: S.settings.signatureFooter, ...data(u) });
     const m: MailItem = {
       id: id('m_'), to: u.email, toName: u.name, userId: u.userId ?? null, subject: r.subject, event: ev,
       status: 'queued', attempts: 0, error: null, triggeredBy: actor, createdAt: now(), sentAt: null, html: r.html, text: r.text,
@@ -787,7 +789,7 @@ export const demoApi: Api = {
   async listSignatures() {
     await wait(120);
     need('mail:send', 'mail:manage', 'settings:manage');
-    return clone({ signatures: S.settings.signatures, signatureFor: S.settings.signatureFor });
+    return clone({ signatures: S.settings.signatures, signatureFor: S.settings.signatureFor, signatureFooter: S.settings.signatureFooter });
   },
 
   async mailHealth() {
@@ -819,9 +821,9 @@ export const demoApi: Api = {
     if (next.sessionIdleMinutes < 5 || next.sessionIdleMinutes > 1440) throw new Error('Session idle timeout must be between 5 and 1440 minutes.');
     const ids = new Set<string>();
     for (const s of next.signatures) {
-      if (!s.team.trim()) throw new Error('Every signature needs a team name.');
-      if (s.email && !EMAIL_RE.test(s.email)) throw new Error(`Enter a valid email address for ${s.team}.`);
-      let id = (s.id || s.team).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      if (!s.name.trim()) throw new Error('Every signature needs a name.');
+      if (s.email && !EMAIL_RE.test(s.email)) throw new Error(`Enter a valid email address for ${s.name}.`);
+      let id = (s.id || s.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       for (let n = 2, base = id; ids.has(id); n++) id = `${base}-${n}`;
       ids.add(id); s.id = id;
     }

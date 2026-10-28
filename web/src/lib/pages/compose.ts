@@ -1,13 +1,13 @@
 import { navigate } from 'astro:transitions/client';
 import type { PageCtx } from '../app';
 import type { User } from '../types';
-import { renderEmail } from '../email';
+import { DEFAULT_FOOTER, renderEmail } from '../email';
 import { $, $$, avatar, debounce, fullName, html, ico, mount, on, toast } from '../ui';
 
 export default async function compose({ api, me, main, ctx }: PageCtx) {
   const [groups, people, sigs] = await Promise.all([
     api.listGroups(), api.listUsers({ size: 100_000 }).then((r) => r.items),
-    api.listSignatures().catch(() => ({ signatures: [], signatureFor: { accounts: '', people: '', work: '' } })),
+    api.listSignatures().catch(() => ({ signatures: [], signatureFor: { accounts: '', people: '', work: '' }, signatureFooter: DEFAULT_FOOTER })),
   ]);
   const active = people.filter((u) => u.enabled);
   const pickedGroups = new Set<string>();
@@ -34,9 +34,9 @@ export default async function compose({ api, me, main, ctx }: PageCtx) {
       <div class="field"><label for="csig">Signature</label>
         <select class="select" id="csig" style="max-width:360px">
           <option value="">No signature</option>
-          ${sigs.signatures.map((s) => html`<option value="${s.id}">${s.team}</option>`)}
+          ${sigs.signatures.map((s) => html`<option value="${s.id}">${s.name}${s.title ? ` · ${s.title}` : ''}</option>`)}
         </select>
-        <span class="hint">Team sign-offs are managed in Settings → Email signatures.</span></div>
+        <span class="hint">Signatures, partner badges and the disclaimer are managed in Settings → Email signatures.</span></div>
       <div class="toolbar" style="margin-top:4px">
         <span class="muted" id="ccount">No recipients yet</span><span class="spacer"></span>
         <a class="btn ghost" href="/mail/">Cancel</a>
@@ -73,7 +73,7 @@ export default async function compose({ api, me, main, ctx }: PageCtx) {
     const sample = recipients()[0];
     const r = renderEmail('mail.direct', {
       origin: location.origin, firstName: sample?.firstName ?? 'there', username: sample?.username, actor: me.name,
-      subject: f.subject || 'Your subject', message: f.message || 'Your message appears here.', signature,
+      subject: f.subject || 'Your subject', message: f.message || 'Your message appears here.', signature, footer: sigs.signatureFooter,
     });
     $<HTMLIFrameElement>('#cprev', main)!.srcdoc = r.html;
   };

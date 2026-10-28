@@ -486,6 +486,7 @@ func (c *call) notifyTo(ev string, rs []recipient, data func(r recipient) mail.D
 			st := c.s.Settings()
 			d.Signature = st.Signature(st.SignatureFor[cat])
 		}
+		d.Footer = c.s.Settings().SignatureFooter
 		subject, html, text := mail.Render(ev, d)
 		var uid *string
 		if r.UserID != "" {

@@ -82,18 +82,18 @@ func TestBuildRejectsBadRecipient(t *testing.T) {
 
 func TestSignatureAndMailboxSetup(t *testing.T) {
 	sig := DefaultSignatures[0]
-	_, html, text := Render("mailbox.setup", Data{Origin: "https://tems.example", FirstName: "Ann", Actor: "Root", WorkEmail: "ann@techzaz.lk", Signature: &sig})
-	for _, want := range []string{"ann@techzaz.lk", "mail.techzaz.lk", "993", "STARTTLS", "Human Resource Team", "/brand/logo-full.png", `href="tel:+767662071"`, `href="https://techzaz.lk"`} {
+	_, html, text := Render("mailbox.setup", Data{Origin: "https://tems.example", FirstName: "Ann", Actor: "Root", WorkEmail: "ann@techzaz.lk", Signature: &sig, Footer: DefaultFooter})
+	for _, want := range []string{"ann@techzaz.lk", "mail.techzaz.lk", "993", "STARTTLS", "Saeed Ahamed", "Chief executive officer", "/brand/logo-full.png", "/brand/partners.png", `href="tel:+97439949696"`, `href="https://www.techzaz.lk"`, "Disclaimer: The contents"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("html is missing %q", want)
 		}
 	}
-	for _, want := range []string{"Incoming server: mail.techzaz.lk · port 993 · SSL/TLS", "--\nHuman Resource Team", "Web: techzaz.lk"} {
+	for _, want := range []string{"Incoming server: mail.techzaz.lk · port 993 · SSL/TLS", "--\nSaeed Ahamed\nChief executive officer", "Web: www.techzaz.lk", "AWS Partner", "\n****", "strictly prohibited."} {
 		if !strings.Contains(text, want) {
 			t.Errorf("text is missing %q", want)
 		}
 	}
-	if _, html, _ := Render("user.updated", Data{}); strings.Contains(html, "logo-full.png") {
+	if _, html, _ := Render("user.updated", Data{Footer: DefaultFooter}); strings.Contains(html, "logo-full.png") || strings.Contains(html, "Disclaimer") {
 		t.Error("signature rendered without one being set")
 	}
 }

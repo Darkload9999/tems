@@ -21,22 +21,22 @@ func cleanSignatures(in []tmail.Signature) ([]tmail.Signature, error) {
 	out := []tmail.Signature{}
 	seen := map[string]bool{}
 	for _, s := range in {
-		s.Team, s.Company, s.Email = strings.TrimSpace(s.Team), strings.TrimSpace(s.Company), strings.TrimSpace(s.Email)
+		s.Name, s.Title, s.Email = strings.TrimSpace(s.Name), strings.TrimSpace(s.Title), strings.TrimSpace(s.Email)
 		s.Phone, s.Web = strings.TrimSpace(s.Phone), strings.TrimSpace(s.Web)
-		if s.Team == "" {
-			return nil, errf(400, "Every signature needs a team name.")
+		if s.Name == "" {
+			return nil, errf(400, "Every signature needs a name.")
 		}
 		if s.Email != "" && !validEmail(s.Email) {
-			return nil, errf(400, "Enter a valid email address for %s.", s.Team)
+			return nil, errf(400, "Enter a valid email address for %s.", s.Name)
 		}
-		for _, v := range []string{s.Team, s.Company, s.Email, s.Phone, s.Web} {
+		for _, v := range []string{s.Name, s.Title, s.Email, s.Phone, s.Web} {
 			if len(v) > 120 {
 				return nil, errf(400, "Signature fields are limited to 120 characters.")
 			}
 		}
 		id := strings.Trim(nonSlug.ReplaceAllString(strings.ToLower(strings.TrimSpace(s.ID)), "-"), "-")
 		if id == "" {
-			id = strings.Trim(nonSlug.ReplaceAllString(strings.ToLower(s.Team), "-"), "-")
+			id = strings.Trim(nonSlug.ReplaceAllString(strings.ToLower(s.Name), "-"), "-")
 		}
 		for base, n := id, 2; seen[id]; n++ {
 			id = fmt.Sprintf("%s-%d", base, n)
@@ -74,7 +74,7 @@ func (s *Server) listSignatures(c *call) error {
 		return err
 	}
 	st := s.Settings()
-	return c.JSON(200, map[string]any{"signatures": st.Signatures, "signatureFor": st.SignatureFor})
+	return c.JSON(200, map[string]any{"signatures": st.Signatures, "signatureFor": st.SignatureFor, "signatureFooter": st.SignatureFooter})
 }
 
 /* ---------- personal email + Outlook setup (super admins) ---------- */

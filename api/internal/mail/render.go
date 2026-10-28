@@ -51,7 +51,8 @@ type Data struct {
 
 	WorkEmail string     // mailbox.setup: the work address being set up
 	Mailbox   *Mailbox   // mailbox.setup: server settings (defaults when nil)
-	Signature *Signature // team sign-off; none when nil
+	Signature *Signature // sign-off; none when nil
+	Footer    Footer     // partner badges + disclaimer under the signature
 }
 
 type copyText struct {
@@ -247,7 +248,7 @@ func Render(ev string, d Data) (subject, htmlBody, text string) {
 	if c.cta != "" {
 		fmt.Fprintf(&b, `<p style="margin:22px 0 22px"><a href="%s" style="display:inline-block;background:#22094d;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">%s &rarr;</a></p>`, e(link), e(c.cta))
 	}
-	b.WriteString(SignatureHTML(d.Signature, d.Origin))
+	b.WriteString(SignatureHTML(d.Signature, d.Footer, d.Origin))
 	fmt.Fprintf(&b, `<p style="margin:18px 0 0;padding-top:16px;border-top:1px solid #ece7f6;font-size:12.5px;color:#6d6884">%s by %s · %s.<br>If you did not expect this email, contact <a href="mailto:soc@techzaz.lk" style="color:#5b3fd6">soc@techzaz.lk</a>.</p>`, verb, e(d.Actor), e(when))
 	b.WriteString(`</td></tr><tr><td style="padding:16px 30px 22px;font-size:11.5px;color:#9a95ad;line-height:1.6">Techzaz Networks · 476/2 Sri Rajasinghe Mawatha, Wattala 11104, Sri Lanka<br>This is an automated message from Techzaz EMS. Please do not reply.</td></tr>`)
 	b.WriteString(`</table></td></tr></table></body></html>`)
@@ -282,7 +283,7 @@ func Render(ev string, d Data) (subject, htmlBody, text string) {
 	if c.cta != "" {
 		t = append(t, "", c.cta+": "+link)
 	}
-	if sig := SignatureText(d.Signature); sig != nil {
+	if sig := SignatureText(d.Signature, d.Footer); sig != nil {
 		t = append(append(t, ""), sig...)
 	}
 	t = append(t, "", verb+" by "+d.Actor+" · "+when+".", "Techzaz Networks — automated message from Techzaz EMS.")

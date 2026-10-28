@@ -267,7 +267,9 @@ export default async function users(c: PageCtx) {
 
   /* ---------- personal email + Outlook setup (super admins) ---------- */
   async function mailboxSetup(u: User, after?: () => void) {
-    const mailbox = (await api.getSettings().catch(() => null))?.mailbox ?? DEFAULT_MAILBOX;
+    const st = await api.getSettings().catch(() => null);
+    const mailbox = st?.mailbox ?? DEFAULT_MAILBOX;
+    const signature = st?.signatures.find((s) => s.id === st.signatureFor.accounts) ?? null;
     const m = modal({
       title: 'Outlook setup', sub: `Send ${fullName(u)} the settings for ${u.email} at their personal address.`, wide: true,
       body: html`<form autocomplete="off">
@@ -298,6 +300,7 @@ export default async function users(c: PageCtx) {
       const f = formData(m.body);
       $<HTMLIFrameElement>('#mbPrev', m.body)!.srcdoc = renderEmail('mailbox.setup', {
         origin: location.origin, firstName: u.firstName, username: u.username, actor: me.name, workEmail: u.email, mailbox, note: f.note,
+        signature, footer: st?.signatureFooter,
       }).html;
     };
     m.body.querySelectorAll('input,textarea').forEach((i) => i.addEventListener('input', debounce(draw, 180)));

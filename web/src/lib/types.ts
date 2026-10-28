@@ -108,17 +108,22 @@ export type NotifyEvent =
   | 'mailbox.setup'
   | 'mail.direct';
 
-/** A team sign-off appended to emails. */
+/** A person's or team's sign-off appended to emails. */
 export interface Signature {
   id: string;
-  team: string;
-  company: string;
+  name: string;
+  title: string;
   email: string;
   phone: string;
   web: string;
 }
 /** Notification categories that each get a signature (see signatureCategory in email.ts). */
 export type SignatureCategory = 'accounts' | 'people' | 'work';
+
+export interface SignatureFooter {
+  hideBadges: boolean;
+  disclaimer: string;
+}
 
 /** Work mailbox servers sent to people in Outlook setup emails. */
 export interface MailboxConfig {
@@ -145,6 +150,8 @@ export interface Settings {
   signatures: Signature[];
   /** Signature id per notification category ('' = none). */
   signatureFor: Record<SignatureCategory, string>;
+  /** Partner badges and disclaimer shown under every signature. */
+  signatureFooter: SignatureFooter;
   mailbox: MailboxConfig;
 }
 

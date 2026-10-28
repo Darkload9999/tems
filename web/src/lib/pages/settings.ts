@@ -28,8 +28,17 @@ export default async function settings({ api, me, main, ctx, cleanup, refreshShe
       <section class="panel reveal" style="--i:1" id="signatures">
         <div class="panel-head"><div><span class="eyebrow">Mail</span><h3 style="margin-top:2px">Email signatures</h3></div>
           <button type="button" class="btn ghost sm" id="sigAdd">${ico('plus')}Add signature</button></div>
-        <p class="muted" style="margin:-4px 0 14px">Team sign-offs added under every email. Pick one per message in Compose; notification emails use the ones chosen below.</p>
+        <p class="muted" style="margin:-4px 0 14px">Sign-offs added under every email: logo, name, title and contact details, then the partner badges and the disclaimer. Pick one per message in Compose; notification emails use the ones chosen below.</p>
         <div id="sigs" class="sig-list"></div>
+        <div class="perm-cat" style="margin:18px 0 0"><div class="perm-cat-head"><h4>Under every signature</h4></div>
+          <label class="perm-row">
+            <div><div style="font-weight:700">AWS Partner and Google Cloud Partner badges</div><div class="pd">Shown below the contact details.</div></div>
+            <span class="switch"><input type="checkbox" id="sigBadges" aria-label="Show partner badges"><span class="track"></span></span>
+          </label>
+          <div class="field" style="margin:10px 0 0"><label for="sigDisc">Disclaimer</label>
+            <textarea class="textarea" id="sigDisc" style="min-height:120px;font-size:13px"></textarea>
+            <span class="hint">Shown between two rows of asterisks at the end of every email that has a signature. Leave empty to hide it.</span></div>
+        </div>
         <div class="perm-cat" style="margin:18px 0 0"><div class="perm-cat-head"><h4>Signs notification emails</h4></div>
           ${(Object.keys(SIGNATURE_CATEGORIES) as SignatureCategory[]).map((k) => html`
             <div class="perm-row">
@@ -96,13 +105,15 @@ export default async function settings({ api, me, main, ctx, cleanup, refreshShe
     </section>` : ''}
     <div id="sbar"></div>`);
 
-  const sigPreview = (i: number) => mount($(`[data-sigprev="${i}"]`, main), raw(signatureHtml(draft.signatures[i], location.origin)));
+  // card previews show the badges; the disclaimer is edited (and previewed) once, below the cards
+  const sigPreview = (i: number) => mount($(`[data-sigprev="${i}"]`, main),
+    raw(signatureHtml(draft.signatures[i], { hideBadges: draft.signatureFooter.hideBadges, disclaimer: '' }, location.origin)));
   const drawSigs = () => {
     mount($('#sigs', main), draft.signatures.length ? html`${draft.signatures.map((s, i) => html`
       <div class="sig-card">
         <div class="sig-fields">
-          <div class="field"><label for="sg-team-${i}">Team</label><input class="input" id="sg-team-${i}" data-sig="${i}" data-f="team" value="${s.team}"></div>
-          <div class="field"><label for="sg-co-${i}">Company</label><input class="input" id="sg-co-${i}" data-sig="${i}" data-f="company" value="${s.company}"></div>
+          <div class="field"><label for="sg-name-${i}">Name or team</label><input class="input" id="sg-name-${i}" data-sig="${i}" data-f="name" value="${s.name}"></div>
+          <div class="field"><label for="sg-title-${i}">Title</label><input class="input" id="sg-title-${i}" data-sig="${i}" data-f="title" value="${s.title}" placeholder="e.g. Chief executive officer"></div>
           <div class="field"><label for="sg-em-${i}">Email</label><input class="input" id="sg-em-${i}" type="email" data-sig="${i}" data-f="email" value="${s.email}"></div>
           <div class="field"><label for="sg-ph-${i}">Mobile</label><input class="input" id="sg-ph-${i}" data-sig="${i}" data-f="phone" value="${s.phone}"></div>
           <div class="field"><label for="sg-web-${i}">Web</label><input class="input" id="sg-web-${i}" data-sig="${i}" data-f="web" value="${s.web}"></div>
@@ -116,7 +127,7 @@ export default async function settings({ api, me, main, ctx, cleanup, refreshShe
     drawSigFor();
   };
   const drawSigFor = () => $$<HTMLSelectElement>('[data-sigfor]', main).forEach((sel) => {
-    mount(sel, html`<option value="">No signature</option>${draft.signatures.map((s) => html`<option value="${s.id}">${s.team || 'Untitled'}</option>`)}`);
+    mount(sel, html`<option value="">No signature</option>${draft.signatures.map((s) => html`<option value="${s.id}">${s.name || 'Untitled'}</option>`)}`);
     sel.value = draft.signatureFor[sel.dataset.sigfor as SignatureCategory] ?? '';
   });
 
@@ -124,6 +135,8 @@ export default async function settings({ api, me, main, ctx, cleanup, refreshShe
     $$<HTMLInputElement>('[data-k]', main).forEach((i) => (i.value = String(draft[i.dataset.k as keyof Settings] ?? '')));
     $$<HTMLInputElement>('[data-mb]', main).forEach((i) => (i.value = String(draft.mailbox[i.dataset.mb as keyof MailboxConfig] ?? '')));
     drawSigs();
+    $<HTMLInputElement>('#sigBadges', main)!.checked = !draft.signatureFooter.hideBadges;
+    $<HTMLTextAreaElement>('#sigDisc', main)!.value = draft.signatureFooter.disclaimer;
     $$<HTMLInputElement>('[data-ev]', main).forEach((i) => (i.checked = !!draft.notifications[i.dataset.ev as NotifyEvent]));
     $$<HTMLInputElement>('[data-doc]', main).forEach((i) => (i.checked = draft.requiredDocuments.includes(i.dataset.doc as DocCategory)));
   };
@@ -141,20 +154,26 @@ export default async function settings({ api, me, main, ctx, cleanup, refreshShe
     const i = Number(el.dataset.sig);
     (draft.signatures[i] as unknown as Record<string, string>)[el.dataset.f!] = (el as HTMLInputElement).value;
     sigPreview(i);
-    if (el.dataset.f === 'team') drawSigFor();
+    if (el.dataset.f === 'name') drawSigFor();
     drawBar();
   });
   on(main, 'click', '#sigAdd', () => {
     const n = draft.signatures.length + 1;
-    draft.signatures.push({ id: `team-${Date.now().toString(36)}`, team: `New team ${n}`, company: draft.signatures[0]?.company ?? draft.orgName, email: '', phone: '', web: 'techzaz.lk' });
+    draft.signatures.push({ id: `sig-${Date.now().toString(36)}`, name: `New signature ${n}`, title: '', email: '', phone: '', web: 'www.techzaz.lk' });
     drawSigs(); drawBar();
-    $<HTMLInputElement>(`#sg-team-${n - 1}`, main)?.select();
+    $<HTMLInputElement>(`#sg-name-${n - 1}`, main)?.select();
   });
   on(main, 'click', '[data-sigrm]', (_e, b) => {
     const [gone] = draft.signatures.splice(Number(b.dataset.sigrm), 1);
     (Object.keys(draft.signatureFor) as SignatureCategory[]).forEach((k) => { if (draft.signatureFor[k] === gone.id) draft.signatureFor[k] = ''; });
     drawSigs(); drawBar();
   });
+  on(main, 'change', '#sigBadges', (_e, el) => {
+    draft.signatureFooter.hideBadges = !(el as HTMLInputElement).checked;
+    draft.signatures.forEach((_s, i) => sigPreview(i));
+    drawBar();
+  });
+  on(main, 'input', '#sigDisc', (_e, el) => { draft.signatureFooter.disclaimer = (el as HTMLTextAreaElement).value; drawBar(); });
   on(main, 'change', '[data-sigfor]', (_e, el) => { draft.signatureFor[el.dataset.sigfor as SignatureCategory] = (el as HTMLSelectElement).value; drawBar(); });
   on(main, 'input', '[data-mb]', (_e, el) => {
     const v = (el as HTMLInputElement).value;

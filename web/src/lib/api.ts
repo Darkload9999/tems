@@ -3,7 +3,7 @@
 import type {
   Agreement, AuditEntry, ComposeInput, DocCategory, Employee, EmployeeDocument, EmployeeEvent, EmployeeInput,
   EmployeeStage, Group, MailItem, MailStatus, Me, MemberPermission, Page, Payroll, PermState, Permission, Project,
-  ProjectHealth, ProjectInput, ProjectStatus, ProjectUpdate, PublicAgreement, Session, Settings, Signature, SignatureCategory, Stats, Ticket,
+  ProjectHealth, ProjectInput, ProjectStatus, ProjectUpdate, PublicAgreement, Session, Settings, Signature, SignatureCategory, SignatureFooter, Stats, Ticket,
   TicketComment, TicketInput, TicketPriority, TicketStatus, TicketType, User, UserInput,
 } from './types';
 import { DEMO, token } from './auth';
@@ -61,7 +61,7 @@ export interface Api {
   resendMail(id: string): Promise<MailItem>;
   deleteMail(id: string): Promise<void>;
   compose(input: ComposeInput): Promise<{ queued: number }>;
-  listSignatures(): Promise<{ signatures: Signature[]; signatureFor: Record<SignatureCategory, string> }>;
+  listSignatures(): Promise<{ signatures: Signature[]; signatureFor: Record<SignatureCategory, string>; signatureFooter: SignatureFooter }>;
   mailHealth(): Promise<MailHealth>;
 
   listAudit(q?: AuditQuery): Promise<Page<AuditEntry>>;

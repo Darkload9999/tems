@@ -5,22 +5,33 @@ import (
 	"strings"
 )
 
-// Signature is a team sign-off appended to emails (Settings → Email signatures).
+// Signature is a person's or team's sign-off appended to emails (Settings → Email signatures).
 type Signature struct {
-	ID      string `json:"id"`
-	Team    string `json:"team"`
-	Company string `json:"company"`
-	Email   string `json:"email"`
-	Phone   string `json:"phone"`
-	Web     string `json:"web"`
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Title string `json:"title"`
+	Email string `json:"email"`
+	Phone string `json:"phone"`
+	Web   string `json:"web"`
 }
 
-// DefaultSignatures are the seeded team templates.
-var DefaultSignatures = []Signature{
-	{ID: "hr", Team: "Human Resource Team", Company: "Techzaz Networks (Pvt) Ltd", Email: "hr@techzaz.lk", Phone: "+76 766 2071", Web: "techzaz.lk"},
-	{ID: "it", Team: "IT Department", Company: "Techzaz Networks (Pvt) Ltd", Email: "hr@techzaz.lk", Phone: "+76 766 2071", Web: "techzaz.lk"},
-	{ID: "marketing", Team: "Marketing Team", Company: "Techzaz Networks (Pvt) Ltd", Email: "hr@techzaz.lk", Phone: "+76 766 2071", Web: "techzaz.lk"},
+// Footer follows every signature: the partner badges and the legal disclaimer.
+type Footer struct {
+	HideBadges bool   `json:"hideBadges"`
+	Disclaimer string `json:"disclaimer"`
 }
+
+// DefaultSignatures are the seeded templates.
+var DefaultSignatures = []Signature{
+	{ID: "ceo", Name: "Saeed Ahamed", Title: "Chief executive officer", Email: "ceo@techzaz.lk", Phone: "+974 3994 9696", Web: "www.techzaz.lk"},
+	{ID: "hr", Name: "Human Resource Team", Title: "Techzaz Networks (Pvt) Ltd", Email: "hr@techzaz.lk", Phone: "+76 766 2071", Web: "www.techzaz.lk"},
+	{ID: "it", Name: "IT Department", Title: "Techzaz Networks (Pvt) Ltd", Email: "hr@techzaz.lk", Phone: "+76 766 2071", Web: "www.techzaz.lk"},
+	{ID: "marketing", Name: "Marketing Team", Title: "Techzaz Networks (Pvt) Ltd", Email: "hr@techzaz.lk", Phone: "+76 766 2071", Web: "www.techzaz.lk"},
+}
+
+const DefaultDisclaimer = "Disclaimer: The contents of this email message and any attachments are intended solely for the addressee(s) and may contain confidential and/or privileged information and may be legally protected from disclosure. If you are not the intended recipient of this message or their agent, or if this message has been addressed to you in error, please immediately alert the sender by reply email and then delete this message and any attachments. If you are not the intended recipient, you are hereby notified that any use, relying on, taking action, publish, alter, dissemination, copying, or storage of this message or its attachments is strictly prohibited."
+
+var DefaultFooter = Footer{Disclaimer: DefaultDisclaimer}
 
 // Categories group notification events for choosing which signature signs them.
 var Categories = []string{"accounts", "people", "work"}
@@ -76,44 +87,55 @@ func telHref(p string) string {
 	return "tel:" + b.String()
 }
 
-// SignatureHTML renders a signature as an email-safe table (copper brand palette).
-func SignatureHTML(s *Signature, origin string) string {
-	if s == nil || s.Team == "" {
+const stars = "**********************************************************************"
+
+// SignatureHTML renders a signature as an email-safe table: logo, bronze rule,
+// name, title and contact lines, then the partner badges and the disclaimer.
+func SignatureHTML(s *Signature, f Footer, origin string) string {
+	if s == nil || s.Name == "" {
 		return ""
 	}
-	row := func(label, value, href string) string {
+	line := func(label, value, href string) string {
 		if value == "" {
 			return ""
 		}
-		return fmt.Sprintf(`<tr><td style="padding:1px 10px 1px 0;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#b98a63">%s</td><td style="padding:1px 0;font-size:13px"><a href="%s" style="color:#5b3d28;text-decoration:none">%s</a></td></tr>`, label, e(href), e(value))
+		return fmt.Sprintf(`<div>%s: <a href="%s" style="color:#7a5530;text-decoration:none">%s</a></div>`, label, e(href), e(value))
 	}
 	var b strings.Builder
-	b.WriteString(`<table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 6px;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif"><tr>`)
-	fmt.Fprintf(&b, `<td style="padding:0 18px 0 0;vertical-align:middle"><img src="%s/brand/logo-full.png" width="112" alt="Techzaz Networks" style="display:block;width:112px;height:auto"></td>`, e(origin))
-	b.WriteString(`<td style="width:3px;background:#c99a72;background-image:linear-gradient(180deg,#e8c39f,#a86f45);border-radius:3px;font-size:0;line-height:0">&nbsp;</td>`)
-	b.WriteString(`<td style="padding:2px 0 2px 16px;vertical-align:middle;line-height:1.5">`)
-	fmt.Fprintf(&b, `<div style="font-size:15px;font-weight:700;color:#4a2f1d;letter-spacing:.005em">%s</div>`, e(s.Team))
-	if s.Company != "" {
-		fmt.Fprintf(&b, `<div style="font-size:13px;color:#8a6a52;margin-bottom:6px">%s</div>`, e(s.Company))
+	b.WriteString(`<div style="margin:26px 0 4px;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif">`)
+	b.WriteString(`<table role="presentation" cellpadding="0" cellspacing="0"><tr>`)
+	fmt.Fprintf(&b, `<td style="padding:0 14px 0 0;vertical-align:middle"><img src="%s/brand/logo-full.png" width="132" alt="Techzaz Networks" style="display:block;width:132px;height:auto"></td>`, e(origin))
+	b.WriteString(`<td style="width:3px;background:#8b6a3e;font-size:0;line-height:0">&nbsp;</td>`)
+	b.WriteString(`<td style="padding:2px 0 2px 12px;vertical-align:middle;font-size:13px;line-height:1.45;color:#7a5530">`)
+	fmt.Fprintf(&b, `<div style="font-size:14px;font-weight:700;color:#5c3d1e">%s</div>`, e(s.Name))
+	if s.Title != "" {
+		fmt.Fprintf(&b, `<div>%s</div>`, e(s.Title))
 	}
-	b.WriteString(`<table role="presentation" cellpadding="0" cellspacing="0">`)
-	b.WriteString(row("Email", s.Email, "mailto:"+s.Email))
-	b.WriteString(row("Mobile", s.Phone, telHref(s.Phone)))
+	b.WriteString(line("Email", s.Email, "mailto:"+s.Email))
+	b.WriteString(line("Mobile", s.Phone, telHref(s.Phone)))
 	if s.Web != "" {
-		b.WriteString(row("Web", webLabel(s.Web), webHref(s.Web)))
+		b.WriteString(line("Web", webLabel(s.Web), webHref(s.Web)))
 	}
-	b.WriteString(`</table></td></tr></table>`)
+	b.WriteString(`</td></tr></table>`)
+	if !f.HideBadges {
+		fmt.Fprintf(&b, `<img src="%s/brand/partners.png" width="200" alt="AWS Partner · Google Cloud Partner" style="display:block;width:200px;height:auto;margin:18px 0 4px">`, e(origin))
+	}
+	if d := strings.TrimSpace(f.Disclaimer); d != "" {
+		rule := `<div style="overflow:hidden;white-space:nowrap;font-size:11px;letter-spacing:1px;color:#9a95ad;line-height:1">` + stars + `</div>`
+		fmt.Fprintf(&b, `<div style="margin-top:18px">%s<p style="margin:12px 0;font-size:11.5px;line-height:1.55;color:#6d6884">%s</p>%s</div>`, rule, strings.ReplaceAll(e(d), "\n", "<br>"), rule)
+	}
+	b.WriteString(`</div>`)
 	return b.String()
 }
 
 // SignatureText is the plain-text sign-off.
-func SignatureText(s *Signature) []string {
-	if s == nil || s.Team == "" {
+func SignatureText(s *Signature, f Footer) []string {
+	if s == nil || s.Name == "" {
 		return nil
 	}
-	t := []string{"--", s.Team}
-	if s.Company != "" {
-		t = append(t, s.Company)
+	t := []string{"--", s.Name}
+	if s.Title != "" {
+		t = append(t, s.Title)
 	}
 	if s.Email != "" {
 		t = append(t, "Email: "+s.Email)
@@ -123,6 +145,12 @@ func SignatureText(s *Signature) []string {
 	}
 	if s.Web != "" {
 		t = append(t, "Web: "+webLabel(s.Web))
+	}
+	if !f.HideBadges {
+		t = append(t, "AWS Partner · Google Cloud Partner")
+	}
+	if d := strings.TrimSpace(f.Disclaimer); d != "" {
+		t = append(t, "", stars, "", d, "", stars)
 	}
 	return t
 }

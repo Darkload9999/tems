@@ -1,6 +1,6 @@
 // Notification email catalogue + renderer (table layout, inline styles, mail-client safe).
 // The Go API renders the same design server-side; this copy powers previews and demo mode.
-import type { MailboxConfig, NotifyEvent, Signature, SignatureCategory } from './types';
+import type { MailboxConfig, NotifyEvent, Signature, SignatureCategory, SignatureFooter } from './types';
 import { esc } from './ui';
 
 export const EVENTS: Record<NotifyEvent, { label: string; desc: string; group: string }> = {
@@ -44,10 +44,13 @@ export const FORCED: NotifyEvent[] = ['mail.direct', 'agreement.sent', 'mailbox.
 
 /* ---------- signatures + mailbox (same defaults as the Go API) ---------- */
 export const DEFAULT_SIGNATURES: Signature[] = [
-  { id: 'hr', team: 'Human Resource Team', company: 'Techzaz Networks (Pvt) Ltd', email: 'hr@techzaz.lk', phone: '+76 766 2071', web: 'techzaz.lk' },
-  { id: 'it', team: 'IT Department', company: 'Techzaz Networks (Pvt) Ltd', email: 'hr@techzaz.lk', phone: '+76 766 2071', web: 'techzaz.lk' },
-  { id: 'marketing', team: 'Marketing Team', company: 'Techzaz Networks (Pvt) Ltd', email: 'hr@techzaz.lk', phone: '+76 766 2071', web: 'techzaz.lk' },
+  { id: 'ceo', name: 'Saeed Ahamed', title: 'Chief executive officer', email: 'ceo@techzaz.lk', phone: '+974 3994 9696', web: 'www.techzaz.lk' },
+  { id: 'hr', name: 'Human Resource Team', title: 'Techzaz Networks (Pvt) Ltd', email: 'hr@techzaz.lk', phone: '+76 766 2071', web: 'www.techzaz.lk' },
+  { id: 'it', name: 'IT Department', title: 'Techzaz Networks (Pvt) Ltd', email: 'hr@techzaz.lk', phone: '+76 766 2071', web: 'www.techzaz.lk' },
+  { id: 'marketing', name: 'Marketing Team', title: 'Techzaz Networks (Pvt) Ltd', email: 'hr@techzaz.lk', phone: '+76 766 2071', web: 'www.techzaz.lk' },
 ];
+export const DEFAULT_DISCLAIMER = 'Disclaimer: The contents of this email message and any attachments are intended solely for the addressee(s) and may contain confidential and/or privileged information and may be legally protected from disclosure. If you are not the intended recipient of this message or their agent, or if this message has been addressed to you in error, please immediately alert the sender by reply email and then delete this message and any attachments. If you are not the intended recipient, you are hereby notified that any use, relying on, taking action, publish, alter, dissemination, copying, or storage of this message or its attachments is strictly prohibited.';
+export const DEFAULT_FOOTER: SignatureFooter = { hideBadges: false, disclaimer: DEFAULT_DISCLAIMER };
 export const DEFAULT_SIGNATURE_FOR: Record<SignatureCategory, string> = { accounts: 'it', people: 'hr', work: 'it' };
 export const SIGNATURE_CATEGORIES: Record<SignatureCategory, { label: string; desc: string }> = {
   accounts: { label: 'Accounts & access', desc: 'Accounts, security, groups, permissions and Outlook setup' },
@@ -72,25 +75,38 @@ const webHref = (w: string) => (/^https?:\/\//.test(w) ? w : `https://${w}`);
 const webLabel = (w: string) => w.replace(/^https?:\/\//, '').replace(/\/$/, '');
 const telHref = (p: string) => `tel:${p.replace(/[^+\d]/g, '')}`;
 
-/** A signature as an email-safe table in the copper brand palette. */
-export function signatureHtml(s: Signature | null | undefined, origin: string): string {
-  if (!s?.team) return '';
-  const row = (label: string, value: string, href: string) => value
-    ? `<tr><td style="padding:1px 10px 1px 0;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#b98a63">${label}</td><td style="padding:1px 0;font-size:13px"><a href="${esc(href)}" style="color:#5b3d28;text-decoration:none">${esc(value)}</a></td></tr>`
-    : '';
-  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 6px;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif"><tr>`
-    + `<td style="padding:0 18px 0 0;vertical-align:middle"><img src="${esc(origin)}/brand/logo-full.png" width="112" alt="Techzaz Networks" style="display:block;width:112px;height:auto"></td>`
-    + `<td style="width:3px;background:#c99a72;background-image:linear-gradient(180deg,#e8c39f,#a86f45);border-radius:3px;font-size:0;line-height:0">&nbsp;</td>`
-    + `<td style="padding:2px 0 2px 16px;vertical-align:middle;line-height:1.5">`
-    + `<div style="font-size:15px;font-weight:700;color:#4a2f1d;letter-spacing:.005em">${esc(s.team)}</div>`
-    + (s.company ? `<div style="font-size:13px;color:#8a6a52;margin-bottom:6px">${esc(s.company)}</div>` : '')
-    + `<table role="presentation" cellpadding="0" cellspacing="0">${row('Email', s.email, `mailto:${s.email}`)}${row('Mobile', s.phone, telHref(s.phone))}${s.web ? row('Web', webLabel(s.web), webHref(s.web)) : ''}</table>`
-    + `</td></tr></table>`;
+const STARS = '*'.repeat(70);
+
+/** A signature as an email-safe table: logo, bronze rule, name, title and
+ *  contact lines, then the partner badges and the disclaimer. */
+export function signatureHtml(s: Signature | null | undefined, f: SignatureFooter, origin: string): string {
+  if (!s?.name) return '';
+  const line = (label: string, value: string, href: string) => value
+    ? `<div>${label}: <a href="${esc(href)}" style="color:#7a5530;text-decoration:none">${esc(value)}</a></div>` : '';
+  const rule = `<div style="overflow:hidden;white-space:nowrap;font-size:11px;letter-spacing:1px;color:#9a95ad;line-height:1">${STARS}</div>`;
+  const disclaimer = f.disclaimer.trim();
+  return `<div style="margin:26px 0 4px;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif">`
+    + `<table role="presentation" cellpadding="0" cellspacing="0"><tr>`
+    + `<td style="padding:0 14px 0 0;vertical-align:middle"><img src="${esc(origin)}/brand/logo-full.png" width="132" alt="Techzaz Networks" style="display:block;width:132px;height:auto"></td>`
+    + `<td style="width:3px;background:#8b6a3e;font-size:0;line-height:0">&nbsp;</td>`
+    + `<td style="padding:2px 0 2px 12px;vertical-align:middle;font-size:13px;line-height:1.45;color:#7a5530">`
+    + `<div style="font-size:14px;font-weight:700;color:#5c3d1e">${esc(s.name)}</div>`
+    + (s.title ? `<div>${esc(s.title)}</div>` : '')
+    + line('Email', s.email, `mailto:${s.email}`) + line('Mobile', s.phone, telHref(s.phone)) + (s.web ? line('Web', webLabel(s.web), webHref(s.web)) : '')
+    + `</td></tr></table>`
+    + (f.hideBadges ? '' : `<img src="${esc(origin)}/brand/partners.png" width="200" alt="AWS Partner · Google Cloud Partner" style="display:block;width:200px;height:auto;margin:18px 0 4px">`)
+    + (disclaimer ? `<div style="margin-top:18px">${rule}<p style="margin:12px 0;font-size:11.5px;line-height:1.55;color:#6d6884">${esc(disclaimer).replace(/\n/g, '<br>')}</p>${rule}</div>` : '')
+    + `</div>`;
 }
 
-const signatureText = (s: Signature | null | undefined) => !s?.team ? [] : [
-  '--', s.team, s.company, s.email && `Email: ${s.email}`, s.phone && `Mobile: ${s.phone}`, s.web && `Web: ${webLabel(s.web)}`,
-].filter(Boolean) as string[];
+function signatureText(s: Signature | null | undefined, f: SignatureFooter): string[] {
+  if (!s?.name) return [];
+  const t = ['--', s.name, s.title, s.email && `Email: ${s.email}`, s.phone && `Mobile: ${s.phone}`, s.web && `Web: ${webLabel(s.web)}`]
+    .filter(Boolean) as string[];
+  if (!f.hideBadges) t.push('AWS Partner · Google Cloud Partner');
+  if (f.disclaimer.trim()) t.push('', STARS, '', f.disclaimer.trim(), '', STARS);
+  return t;
+}
 
 const mailboxRows = (work: string, m: MailboxConfig): [string, string][] => [
   ['Email address', work],
@@ -142,7 +158,8 @@ export interface EmailData {
   expires?: string;
   workEmail?: string;          // mailbox.setup: the work address being set up
   mailbox?: MailboxConfig;     // mailbox.setup: server settings (defaults when absent)
-  signature?: Signature | null; // team sign-off
+  signature?: Signature | null; // sign-off
+  footer?: SignatureFooter;     // partner badges + disclaimer under the signature
 }
 
 interface Copy { subject: string; title: string; lead: string; body?: string; cta?: string; tone?: 'warn' | 'ok' }
@@ -280,7 +297,7 @@ export function renderEmail(ev: NotifyEvent, d: EmailData): { subject: string; h
   ${d.note ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px"><tr><td style="border-left:3px solid ${accent};background:#f7f4fd;border-radius:0 10px 10px 0;padding:12px 16px;font-size:14px;color:#3a3647">${esc(d.note).replace(/\n/g, '<br>')}</td></tr></table>` : ''}
   ${c.body ? `<p style="margin:0 0 14px">${esc(c.body)}</p>` : ''}
   ${c.cta ? `<p style="margin:22px 0 22px"><a href="${esc(d.link || d.origin)}" style="display:inline-block;background:#22094d;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">${esc(c.cta)} &rarr;</a></p>` : ''}
-  ${signatureHtml(d.signature, d.origin)}
+  ${signatureHtml(d.signature, d.footer ?? DEFAULT_FOOTER, d.origin)}
   <p style="margin:18px 0 0;padding-top:16px;border-top:1px solid #ece7f6;font-size:12.5px;color:#6d6884">${sent ? 'Sent' : 'Changed'} by ${esc(d.actor)} · ${esc(when)}.<br>If you did not expect this email, contact <a href="mailto:soc@techzaz.lk" style="color:#5b3fd6">soc@techzaz.lk</a>.</p>
 </td></tr>
 <tr><td style="padding:16px 30px 22px;font-size:11.5px;color:#9a95ad;line-height:1.6">Techzaz Networks · 476/2 Sri Rajasinghe Mawatha, Wattala 11104, Sri Lanka<br>This is an automated message from Techzaz EMS. Please do not reply.</td></tr>
@@ -293,7 +310,7 @@ export function renderEmail(ev: NotifyEvent, d: EmailData): { subject: string; h
     ...(ev === 'mailbox.setup' ? mailboxText(d.workEmail ?? '', mb) : []),
     ...(d.added ?? []).map((x) => `+ ${x}`), ...(d.removed ?? []).map((x) => `- ${x}`), ...(d.changes ?? []).map((x) => `* ${x}`),
     d.note ? `> ${d.note.replace(/\n/g, '\n> ')}` : '',
-    c.body ?? '', c.cta ? `${c.cta}: ${d.link || d.origin}` : '', '', ...signatureText(d.signature), '',
+    c.body ?? '', c.cta ? `${c.cta}: ${d.link || d.origin}` : '', '', ...signatureText(d.signature, d.footer ?? DEFAULT_FOOTER), '',
     `${sent ? 'Sent' : 'Changed'} by ${d.actor} · ${when}.`, 'Techzaz Networks — automated message from Techzaz EMS.',
   ].filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n');
 

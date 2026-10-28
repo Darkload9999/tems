@@ -230,11 +230,13 @@ type Settings struct {
 	SessionIdleMinutes int             `json:"sessionIdleMinutes"`
 	PasswordMinLength  int             `json:"passwordMinLength"`
 	RequiredDocuments  []string        `json:"requiredDocuments"`
-	// Team sign-offs, which one signs each category of notification, and the
-	// work mailbox servers sent in Outlook setup emails.
-	Signatures   []tmail.Signature `json:"signatures"`
-	SignatureFor map[string]string `json:"signatureFor"`
-	Mailbox      tmail.Mailbox     `json:"mailbox"`
+	// Sign-offs, which one signs each category of notification, the badges and
+	// disclaimer under every signature, and the work mailbox servers sent in
+	// Outlook setup emails.
+	Signatures      []tmail.Signature `json:"signatures"`
+	SignatureFor    map[string]string `json:"signatureFor"`
+	SignatureFooter tmail.Footer      `json:"signatureFooter"`
+	Mailbox         tmail.Mailbox     `json:"mailbox"`
 }
 
 func defaultSignatureFor() map[string]string {
@@ -262,7 +264,8 @@ func (s *Server) defaults() Settings {
 	return Settings{
 		OrgName: "Techzaz Networks", MailFromName: s.cfg.MailFromName, MailFrom: s.cfg.MailFrom, ReplyTo: "soc@techzaz.lk",
 		Notifications: n, SessionIdleMinutes: 30, PasswordMinLength: 10, RequiredDocuments: defaultRequiredDocs,
-		Signatures: append([]tmail.Signature(nil), tmail.DefaultSignatures...), SignatureFor: defaultSignatureFor(), Mailbox: tmail.DefaultMailbox,
+		Signatures: append([]tmail.Signature(nil), tmail.DefaultSignatures...), SignatureFor: defaultSignatureFor(),
+		SignatureFooter: tmail.DefaultFooter, Mailbox: tmail.DefaultMailbox,
 	}
 }
 
@@ -281,8 +284,15 @@ func (s *Server) LoadSettings(ctx context.Context) error {
 	if st.RequiredDocuments == nil {
 		st.RequiredDocuments = defaultRequiredDocs
 	}
+	for _, sg := range st.Signatures { // an earlier draft stored team/company instead of name/title
+		if sg.Name == "" {
+			st.Signatures = nil
+			break
+		}
+	}
 	if st.Signatures == nil { // settings saved before signatures existed
 		st.Signatures = append([]tmail.Signature(nil), tmail.DefaultSignatures...)
+		st.SignatureFooter = tmail.DefaultFooter
 	}
 	if st.SignatureFor == nil {
 		st.SignatureFor = defaultSignatureFor()
@@ -393,6 +403,10 @@ func (s *Server) saveSettings(c *call) error {
 		}
 		clean.SignatureFor[k] = id
 	}
+	clean.SignatureFooter = tmail.Footer{HideBadges: in.SignatureFooter.HideBadges, Disclaimer: strings.TrimSpace(in.SignatureFooter.Disclaimer)}
+	if len(clean.SignatureFooter.Disclaimer) > 4000 {
+		return errf(400, "Keep the disclaimer under 4,000 characters.")
+	}
 	if clean.Mailbox, err = cleanMailbox(in.Mailbox); err != nil {
 		return err
 	}
@@ -426,7 +440,7 @@ func (s *Server) saveSettings(c *call) error {
 	if strings.Join(old.RequiredDocuments, ",") != strings.Join(clean.RequiredDocuments, ",") {
 		changed = append(changed, "required documents")
 	}
-	if fmt.Sprint(old.Signatures, old.SignatureFor) != fmt.Sprint(clean.Signatures, clean.SignatureFor) {
+	if fmt.Sprint(old.Signatures, old.SignatureFor, old.SignatureFooter) != fmt.Sprint(clean.Signatures, clean.SignatureFor, clean.SignatureFooter) {
 		changed = append(changed, "email signatures")
 	}
 	if old.Mailbox != clean.Mailbox {
