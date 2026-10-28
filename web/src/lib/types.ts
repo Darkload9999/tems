@@ -20,6 +20,8 @@ export interface UserAttrs {
   department?: string;
   jobTitle?: string;
   phone?: string;
+  /** Personal (e.g. Gmail) address, set by super admins; Outlook setup emails go here. */
+  personalEmail?: string;
 }
 
 export interface User {
@@ -103,7 +105,32 @@ export type NotifyEvent =
   | 'agreement.sent' | 'agreement.signed'
   | 'project.assigned' | 'project.unassigned' | 'project.status_changed'
   | 'ticket.assigned' | 'ticket.updated' | 'ticket.commented'
+  | 'mailbox.setup'
   | 'mail.direct';
+
+/** A team sign-off appended to emails. */
+export interface Signature {
+  id: string;
+  team: string;
+  company: string;
+  email: string;
+  phone: string;
+  web: string;
+}
+/** Notification categories that each get a signature (see signatureCategory in email.ts). */
+export type SignatureCategory = 'accounts' | 'people' | 'work';
+
+/** Work mailbox servers sent to people in Outlook setup emails. */
+export interface MailboxConfig {
+  incomingHost: string;
+  incomingPort: number;
+  incomingSecurity: MailSecurity;
+  outgoingHost: string;
+  outgoingPort: number;
+  outgoingSecurity: MailSecurity;
+  webmail: string;
+}
+export type MailSecurity = 'SSL/TLS' | 'STARTTLS' | 'None';
 
 export interface Settings {
   orgName: string;
@@ -115,6 +142,10 @@ export interface Settings {
   passwordMinLength: number;
   /** Documents HR must upload before an employee can be submitted for approval. */
   requiredDocuments: DocCategory[];
+  signatures: Signature[];
+  /** Signature id per notification category ('' = none). */
+  signatureFor: Record<SignatureCategory, string>;
+  mailbox: MailboxConfig;
 }
 
 export interface Me {
@@ -167,6 +198,8 @@ export interface ComposeInput {
   groupIds: string[];
   subject: string;
   message: string;
+  /** Signature id ('' = none). */
+  signature?: string;
 }
 
 /* ---------- HR: employees, documents, onboarding, agreements ---------- */

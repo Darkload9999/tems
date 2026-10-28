@@ -1,8 +1,8 @@
 ---
-import '@fontsource-variable/plus-jakarta-sans';
+import '@fontsource/roboto/400.css';
+import '@fontsource/roboto/500.css';
+import '@fontsource/roboto/700.css';
 import '@fontsource/montserrat/300.css';
-import '@fontsource/montserrat/600.css';
-import '@fontsource/montserrat/700.css';
 import '@fontsource/montserrat/800.css';
 import '@fontsource-variable/jetbrains-mono';
 import '../styles/theme.css';
@@ -12,17 +12,15 @@ import Sidebar from '../components/Sidebar.astro';
 import { icon } from '../lib/icons';
 
 interface Props {
-  title: string;      // <title>
-  mega: string;       // giant hero heading, e.g. "USERS."
-  sub?: string;
+  title: string;      // <title> and the page heading
+  heading?: string;   // page heading when it differs from the title
+  sub?: string;       // one-line description under the heading
   page: string;       // page module key (see lib/app.ts)
   perm?: string;      // permission required to view the page
-  tall?: boolean;     // tall hero (dashboard)
   wide?: boolean;     // no context column
 }
-const { title, mega, sub, page, perm, tall = false, wide = false } = Astro.props;
+const { title, heading = title, sub, page, perm, wide = false } = Astro.props;
 const DEMO = import.meta.env.PUBLIC_TEMS_DEMO !== 'false';
-const words = mega.split(' ');
 
 const ease = 'cubic-bezier(.16,1,.3,1)';
 const rise = {
@@ -36,7 +34,7 @@ const rise = {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
-    <meta name="theme-color" content="#2d0d60" />
+    <meta name="theme-color" content="#f6f2fa" />
     <title>{title} · Techzaz EMS</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <script is:inline>
@@ -50,18 +48,7 @@ const rise = {
     <ClientRouter fallback="swap" />
   </head>
   <body>
-    <div class="canvas" transition:persist="canvas" aria-hidden="true"><div class="glow-2"></div></div>
-
     <Topbar />
-
-    <section class:list={['hero', { tall }]} transition:animate="fade">
-      <slot name="hero" />
-      <h1 class="mega">
-        {words.map((w, i) => (<><span class="w"><span style={`animation-delay:${120 + i * 95}ms`}>{w}</span></span>{i < words.length - 1 ? ' ' : ''}</>))}
-      </h1>
-      {sub && <p class="hero-sub">{sub}</p>}
-      <slot name="hero-actions" />
-    </section>
 
     <div class="shell">
       <Sidebar />
@@ -72,17 +59,19 @@ const rise = {
             <span>Techzaz EMS is running on <b>built-in demo data</b>: every change, audit entry and notification email is simulated in your browser. <button id="demoReset" class="linklike" style="background:none;border:0;padding:0;font-weight:700;text-decoration:underline;color:inherit">Reset demo data</button></span>
           </div>
         )}
+        <header class="page-head">
+          <div>
+            <h1>{heading}</h1>
+            {sub && <p>{sub}</p>}
+          </div>
+          <slot name="head-actions" />
+        </header>
         <main class="main" id="page" data-page={page} data-perm={perm}>
           <slot />
         </main>
         {!wide && <aside class="context" id="ctx" aria-label="On this page"><slot name="context" /></aside>}
       </div>
     </div>
-
-    <footer class="foot">
-      <span>© {new Date().getFullYear()} Techzaz Networks · Information is power.</span>
-      <span>Techzaz EMS · Keycloak · Go · Astro</span>
-    </footer>
 
     <div class="toasts" transition:persist="toasts" aria-live="polite"></div>
 

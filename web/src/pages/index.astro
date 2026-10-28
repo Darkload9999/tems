@@ -2,25 +2,7 @@
 import Admin from '../layouts/Admin.astro';
 import Skeleton from '../components/Skeleton.astro';
 ---
-<Admin title="Dashboard" mega="IDENTITY, MEET INBOX." page="dashboard" perm="dashboard:view" tall
-  sub="Centralized sign-in, access control and user notifications for Techzaz Networks.">
-  <div slot="hero" class="windows" aria-hidden="true">
-    <div class="win w1">
-      <div class="win-dots"><i></i><i></i><i></i></div>
-      <div class="win-body">
-        <div class="c-com">// grant access once, at the group:</div>
-        <div><span class="c-kw">await</span> tems.<span class="c-fn">groups</span>(<span class="c-str">"Support"</span>).<span class="c-fn">allow</span>(<span class="c-str">"users:edit"</span>)</div>
-        <div class="c-com" id="w1out">// → members notified by email</div>
-      </div>
-    </div>
-    <div class="win w2">
-      <div class="win-dots"><i></i><i></i><i></i></div>
-      <div class="win-body">
-        <div class="c-com">// fine-tune a single member:</div>
-        <div><span class="c-kw">await</span> tems.<span class="c-fn">member</span>(<span class="c-str">"sachini"</span>).<span class="c-fn">deny</span>(<span class="c-str">"reset-password"</span>)</div>
-        <div class="c-com" id="w2out">// → effective access recomputed</div>
-      </div>
-    </div>
-  </div>
+<Admin title="Dashboard" page="dashboard" perm="dashboard:view"
+  sub="People, access, work and mail for Techzaz Networks at a glance.">
   <Skeleton rows={4} />
 </Admin>

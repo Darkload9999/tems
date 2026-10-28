@@ -79,3 +79,29 @@ func TestBuildRejectsBadRecipient(t *testing.T) {
 		t.Errorf("want permanent 5xx error, got %v", err)
 	}
 }
+
+func TestSignatureAndMailboxSetup(t *testing.T) {
+	sig := DefaultSignatures[0]
+	_, html, text := Render("mailbox.setup", Data{Origin: "https://tems.example", FirstName: "Ann", Actor: "Root", WorkEmail: "ann@techzaz.lk", Signature: &sig})
+	for _, want := range []string{"ann@techzaz.lk", "mail.techzaz.lk", "993", "STARTTLS", "Human Resource Team", "/brand/logo-full.png", `href="tel:+767662071"`, `href="https://techzaz.lk"`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("html is missing %q", want)
+		}
+	}
+	for _, want := range []string{"Incoming server: mail.techzaz.lk · port 993 · SSL/TLS", "--\nHuman Resource Team", "Web: techzaz.lk"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("text is missing %q", want)
+		}
+	}
+	if _, html, _ := Render("user.updated", Data{}); strings.Contains(html, "logo-full.png") {
+		t.Error("signature rendered without one being set")
+	}
+}
+
+func TestCategory(t *testing.T) {
+	for ev, want := range map[string]string{"mail.direct": "", "employee.approved": "people", "agreement.sent": "people", "ticket.assigned": "work", "user.created": "accounts", "mailbox.setup": "accounts"} {
+		if got := Category(ev); got != want {
+			t.Errorf("Category(%q) = %q, want %q", ev, got, want)
+		}
+	}
+}

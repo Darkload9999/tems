@@ -13,7 +13,7 @@ import (
 // Events lists every notification event; settings toggle all but mail.direct.
 var Events = []string{
 	"user.created", "user.updated", "user.disabled", "user.enabled", "user.deleted",
-	"user.password_reset", "user.sessions_revoked", "superadmin.granted", "superadmin.revoked",
+	"user.password_reset", "user.sessions_revoked", "superadmin.granted", "superadmin.revoked", "mailbox.setup",
 	"group.member_added", "group.member_removed", "group.permissions_changed", "group.renamed", "group.deleted",
 	"member.permissions_changed",
 	"employee.onboarding_started", "employee.updated", "employee.payroll_changed", "employee.document_added",
@@ -25,7 +25,7 @@ var Events = []string{
 }
 
 // Forced events are always delivered, whatever the notification settings say.
-var Forced = map[string]bool{"mail.direct": true, "agreement.sent": true}
+var Forced = map[string]bool{"mail.direct": true, "agreement.sent": true, "mailbox.setup": true}
 
 type Data struct {
 	Origin    string
@@ -48,6 +48,10 @@ type Data struct {
 	Project string
 	Note    string // free text from the actor (approval note, comment, status note)
 	Expires string // human-readable link expiry
+
+	WorkEmail string     // mailbox.setup: the work address being set up
+	Mailbox   *Mailbox   // mailbox.setup: server settings (defaults when nil)
+	Signature *Signature // team sign-off; none when nil
 }
 
 type copyText struct {
@@ -82,6 +86,8 @@ func copyFor(ev string, d Data) copyText {
 			lead = "An administrator reset your password. They will share a temporary password with you, and you will choose a new one on your next sign-in."
 		}
 		return copyText{"Your password was reset", "Password reset.", lead, "", "", "warn"}
+	case "mailbox.setup":
+		return copyText{"Your Techzaz work email is ready: " + d.WorkEmail, "Your mailbox.", "Your Techzaz Networks work email <b>" + e(d.WorkEmail) + "</b> is ready. We sent these setup details to your personal address so you can add it to Outlook on your computer and phone.", "", "Sign in to Techzaz EMS", "ok"}
 	case "user.sessions_revoked":
 		return copyText{"You were signed out of all devices", "Signed out.", "An administrator ended all of your active sessions. Sign in again to continue.", "", "Sign in", "warn"}
 	case "superadmin.granted":
@@ -189,7 +195,7 @@ func Render(ev string, d Data) (subject, htmlBody, text string) {
 		}
 	}
 	verb := "Changed"
-	if ev == "mail.direct" || ev == "agreement.sent" {
+	if ev == "mail.direct" || ev == "agreement.sent" || ev == "mailbox.setup" {
 		verb = "Sent"
 	}
 	when := time.Now().Format("02 Jan 2006, 15:04")
@@ -218,6 +224,13 @@ func Render(ev string, d Data) (subject, htmlBody, text string) {
 		fmt.Fprintf(&b, `<p style="margin:0 0 14px">%s</p>`, c.lead)
 	}
 	b.WriteString(msg.String())
+	mb := d.Mailbox
+	if mb == nil {
+		mb = &DefaultMailbox
+	}
+	if ev == "mailbox.setup" {
+		b.WriteString(mailboxHTML(d.WorkEmail, mb))
+	}
 	if list != "" {
 		fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="background:#f1ecfd;border-radius:12px;margin:4px 0 18px"><tr><td style="padding:14px 18px"><table role="presentation" cellpadding="0" cellspacing="0">%s</table></td></tr></table>`, list)
 	}
@@ -234,6 +247,7 @@ func Render(ev string, d Data) (subject, htmlBody, text string) {
 	if c.cta != "" {
 		fmt.Fprintf(&b, `<p style="margin:22px 0 22px"><a href="%s" style="display:inline-block;background:#22094d;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">%s &rarr;</a></p>`, e(link), e(c.cta))
 	}
+	b.WriteString(SignatureHTML(d.Signature, d.Origin))
 	fmt.Fprintf(&b, `<p style="margin:18px 0 0;padding-top:16px;border-top:1px solid #ece7f6;font-size:12.5px;color:#6d6884">%s by %s · %s.<br>If you did not expect this email, contact <a href="mailto:soc@techzaz.lk" style="color:#5b3fd6">soc@techzaz.lk</a>.</p>`, verb, e(d.Actor), e(when))
 	b.WriteString(`</td></tr><tr><td style="padding:16px 30px 22px;font-size:11.5px;color:#9a95ad;line-height:1.6">Techzaz Networks · 476/2 Sri Rajasinghe Mawatha, Wattala 11104, Sri Lanka<br>This is an automated message from Techzaz EMS. Please do not reply.</td></tr>`)
 	b.WriteString(`</table></td></tr></table></body></html>`)
@@ -246,6 +260,9 @@ func Render(ev string, d Data) (subject, htmlBody, text string) {
 	}
 	if ev == "mail.direct" {
 		t = append(t, d.Message)
+	}
+	if ev == "mailbox.setup" {
+		t = append(t, mailboxText(d.WorkEmail, mb)...)
 	}
 	for _, x := range d.Added {
 		t = append(t, "+ "+x)
@@ -264,6 +281,9 @@ func Render(ev string, d Data) (subject, htmlBody, text string) {
 	}
 	if c.cta != "" {
 		t = append(t, "", c.cta+": "+link)
+	}
+	if sig := SignatureText(d.Signature); sig != nil {
+		t = append(append(t, ""), sig...)
 	}
 	t = append(t, "", verb+" by "+d.Actor+" · "+when+".", "Techzaz Networks — automated message from Techzaz EMS.")
 	return c.subject, b.String(), strings.Join(t, "\n")

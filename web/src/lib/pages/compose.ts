@@ -5,7 +5,10 @@ import { renderEmail } from '../email';
 import { $, $$, avatar, debounce, fullName, html, ico, mount, on, toast } from '../ui';
 
 export default async function compose({ api, me, main, ctx }: PageCtx) {
-  const [groups, people] = await Promise.all([api.listGroups(), api.listUsers({ size: 100_000 }).then((r) => r.items)]);
+  const [groups, people, sigs] = await Promise.all([
+    api.listGroups(), api.listUsers({ size: 100_000 }).then((r) => r.items),
+    api.listSignatures().catch(() => ({ signatures: [], signatureFor: { accounts: '', people: '', work: '' } })),
+  ]);
   const active = people.filter((u) => u.enabled);
   const pickedGroups = new Set<string>();
   const pickedUsers = new Set<string>();
@@ -28,6 +31,12 @@ export default async function compose({ api, me, main, ctx }: PageCtx) {
       </div>
       <div class="field"><label for="csub">Subject</label><input class="input" id="csub" name="subject" maxlength="140" placeholder="e.g. Scheduled maintenance this Saturday"></div>
       <div class="field"><label for="cmsg">Message</label><textarea class="textarea" id="cmsg" name="message" style="min-height:180px" placeholder="Write your message. Blank lines start a new paragraph."></textarea></div>
+      <div class="field"><label for="csig">Signature</label>
+        <select class="select" id="csig" style="max-width:360px">
+          <option value="">No signature</option>
+          ${sigs.signatures.map((s) => html`<option value="${s.id}">${s.team}</option>`)}
+        </select>
+        <span class="hint">Team sign-offs are managed in Settings → Email signatures.</span></div>
       <div class="toolbar" style="margin-top:4px">
         <span class="muted" id="ccount">No recipients yet</span><span class="spacer"></span>
         <a class="btn ghost" href="/mail/">Cancel</a>
@@ -60,10 +69,11 @@ export default async function compose({ api, me, main, ctx }: PageCtx) {
 
   const drawPreview = () => {
     const f = { subject: $<HTMLInputElement>('#csub', main)!.value, message: $<HTMLTextAreaElement>('#cmsg', main)!.value };
+    const signature = sigs.signatures.find((s) => s.id === $<HTMLSelectElement>('#csig', main)!.value) ?? null;
     const sample = recipients()[0];
     const r = renderEmail('mail.direct', {
       origin: location.origin, firstName: sample?.firstName ?? 'there', username: sample?.username, actor: me.name,
-      subject: f.subject || 'Your subject', message: f.message || 'Your message appears here.',
+      subject: f.subject || 'Your subject', message: f.message || 'Your message appears here.', signature,
     });
     $<HTMLIFrameElement>('#cprev', main)!.srcdoc = r.html;
   };
@@ -98,6 +108,9 @@ export default async function compose({ api, me, main, ctx }: PageCtx) {
   });
   on(main, 'click', '[data-unpick]', (_e, b) => { pickedUsers.delete(b.dataset.unpick!); drawPicks(); drawPreview(); });
   ['#csub', '#cmsg'].forEach((s) => $(s, main)!.addEventListener('input', debounce(drawPreview, 180)));
+  const sigSel = $<HTMLSelectElement>('#csig', main)!;
+  sigSel.value = sigs.signatures.some((s) => s.id === sigs.signatureFor.accounts) ? sigs.signatureFor.accounts : (sigs.signatures[0]?.id ?? '');
+  sigSel.addEventListener('change', drawPreview);
 
   $('#cform', main)!.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -106,7 +119,7 @@ export default async function compose({ api, me, main, ctx }: PageCtx) {
     const message = $<HTMLTextAreaElement>('#cmsg', main)!.value.trim();
     btn.disabled = true;
     try {
-      const { queued } = await api.compose({ userIds: [...pickedUsers], groupIds: [...pickedGroups], subject, message });
+      const { queued } = await api.compose({ userIds: [...pickedUsers], groupIds: [...pickedGroups], subject, message, signature: sigSel.value });
       toast(`Message queued for ${queued} recipient${queued === 1 ? '' : 's'}`, subject, 'mail');
       await navigate('/mail/');
     } catch (err) {

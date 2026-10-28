@@ -1,6 +1,7 @@
 import type { PageCtx } from '../app';
 import type { Group, Session, User } from '../types';
 import { memberPermEditor } from '../permEditor';
+import { DEFAULT_MAILBOX, renderEmail } from '../email';
 import {
   $, avatar, confirmDanger, copy, debounce, fmt, formData, fullName, html, ico, modal, mount, on, rel, requireFields, stagger, toast,
 } from '../ui';
@@ -165,6 +166,7 @@ export default async function users(c: PageCtx) {
               <div class="field"><label for="n-dept">Department</label><input class="input" id="n-dept" name="department"></div>
               <div class="field"><label for="n-title">Job title</label><input class="input" id="n-title" name="jobTitle"></div>
               <div class="field"><label for="n-phone">Phone</label><input class="input" id="n-phone" name="phone" placeholder="+94 7X XXX XXXX"></div>
+              ${me.superAdmin ? html`<div class="field"><label for="n-personal">Personal email</label><input class="input" id="n-personal" name="personalEmail" type="email" placeholder="name@gmail.com"><span class="hint">Optional. Receives the Outlook setup for the work email.</span></div>` : ''}
             </div>
           </div>
           <div data-pane="2" hidden>
@@ -200,6 +202,10 @@ export default async function users(c: PageCtx) {
             setup: f.setup as 'link' | 'temporary', temporaryPassword: f.setup === 'temporary' ? f.temp : undefined,
           });
           toast(`Created ${u.username}`, f.setup === 'link' ? 'A password setup link is on its way to them.' : 'Share the temporary password with them securely.');
+          if (me.superAdmin && f.personalEmail) {
+            try { await api.mailboxSetup(u.id, { personalEmail: f.personalEmail, send: true }); toast('Outlook setup sent', f.personalEmail, 'mail'); }
+            catch (err) { toast('Outlook setup not sent', (err as Error).message, 'err'); }
+          }
           await changed();
           openUser(u.id);
           })();
@@ -257,6 +263,45 @@ export default async function users(c: PageCtx) {
         } },
       ],
     });
+  }
+
+  /* ---------- personal email + Outlook setup (super admins) ---------- */
+  async function mailboxSetup(u: User, after?: () => void) {
+    const mailbox = (await api.getSettings().catch(() => null))?.mailbox ?? DEFAULT_MAILBOX;
+    const m = modal({
+      title: 'Outlook setup', sub: `Send ${fullName(u)} the settings for ${u.email} at their personal address.`, wide: true,
+      body: html`<form autocomplete="off">
+        <div class="grid-2">
+          <div class="field"><label for="mb-personal">Personal email</label><input class="input" id="mb-personal" name="personalEmail" type="email" placeholder="name@gmail.com" value="${u.attributes.personalEmail ?? ''}" autofocus>
+            <span class="hint">Gmail, Outlook.com or any address they read today.</span></div>
+          <div class="field"><label>Work email</label><input class="input" value="${u.email}" disabled></div>
+          <div class="field" style="grid-column:1/-1"><label for="mb-note">Note <span class="muted" style="font-weight:400">(optional)</span></label><textarea class="textarea" id="mb-note" name="note" style="min-height:70px" placeholder="e.g. Your mailbox password will be shared by IT on your first day."></textarea></div>
+        </div>
+        <div class="field" style="margin:0"><label>Preview</label><iframe class="mail-frame" id="mbPrev" title="Email preview" sandbox="allow-same-origin" style="height:440px"></iframe></div>
+      </form>`,
+      actions: [
+        { label: 'Cancel', kind: 'ghost' },
+        { label: 'Save address only', kind: 'soft', onClick: async ({ body }) => {
+          const f = formData(body);
+          await api.mailboxSetup(u.id, { personalEmail: f.personalEmail, send: false });
+          toast('Personal email saved', f.personalEmail || 'Removed'); await changed(); after?.();
+        } },
+        { label: 'Send setup email', icon: 'send', onClick: async ({ body }) => {
+          requireFields(body, ['personalEmail']);
+          const f = formData(body);
+          await api.mailboxSetup(u.id, { personalEmail: f.personalEmail, note: f.note, send: true });
+          toast('Outlook setup sent', f.personalEmail, 'mail'); await changed(); after?.();
+        } },
+      ],
+    });
+    const draw = () => {
+      const f = formData(m.body);
+      $<HTMLIFrameElement>('#mbPrev', m.body)!.srcdoc = renderEmail('mailbox.setup', {
+        origin: location.origin, firstName: u.firstName, username: u.username, actor: me.name, workEmail: u.email, mailbox, note: f.note,
+      }).html;
+    };
+    m.body.querySelectorAll('input,textarea').forEach((i) => i.addEventListener('input', debounce(draw, 180)));
+    draw();
   }
 
   /* ---------- delete ---------- */
@@ -320,6 +365,7 @@ export default async function users(c: PageCtx) {
           <div style="margin-left:auto;display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end">
             ${can('users:edit') ? html`<button class="btn soft sm" data-a="edit">${ico('edit')}Edit</button>` : ''}
             ${can('users:reset-password') ? html`<button class="btn soft sm" data-a="reset">${ico('key')}Reset password</button>` : ''}
+            ${me.superAdmin ? html`<button class="btn soft sm" data-a="mailbox">${ico('mail')}Outlook setup</button>` : ''}
             ${can('users:edit') && !isSelf ? html`<button class="btn soft sm" data-a="toggle">${ico(u.enabled ? 'ban' : 'power')}${u.enabled ? 'Disable' : 'Enable'}</button>` : ''}
             ${can('users:delete') && !isSelf ? html`<button class="btn danger sm" data-a="delete">${ico('trash')}Delete</button>` : ''}
           </div>
@@ -343,6 +389,8 @@ export default async function users(c: PageCtx) {
             <dt>Department</dt><dd>${u.attributes.department || '—'}</dd>
             <dt>Job title</dt><dd>${u.attributes.jobTitle || '—'}</dd>
             <dt>Phone</dt><dd>${u.attributes.phone || '—'}</dd>
+            <dt>Personal email</dt><dd>${u.attributes.personalEmail || html`<span class="muted">—</span>`}
+              ${me.superAdmin ? html` <button class="btn ghost sm" data-a="mailbox" style="margin-left:6px">${ico('send')}${u.attributes.personalEmail ? 'Send Outlook setup' : 'Add'}</button>` : ''}</dd>
             <dt>Created</dt><dd>${fmt(u.createdAt)}</dd>
             <dt>Last sign-in</dt><dd>${u.lastLogin ? html`${fmt(u.lastLogin)} <span class="muted">(${rel(u.lastLogin)})</span>` : 'Never'}</dd>
             <dt>Pending actions</dt><dd>${u.requiredActions.length ? u.requiredActions.map((a) => html`<span class="tag warn" style="margin-right:4px">${a.replace(/_/g, ' ').toLowerCase()}</span>`) : '—'}</dd>
@@ -416,6 +464,7 @@ export default async function users(c: PageCtx) {
       const a = b.dataset.a;
       if (a === 'edit') editUser(u, refresh);
       if (a === 'reset') resetPassword(u, refresh);
+      if (a === 'mailbox') void mailboxSetup(u, refresh);
       if (a === 'delete') deleteUser(u, done);
       if (a === 'copyId') copy(u.id);
       if (a === 'toggle') {

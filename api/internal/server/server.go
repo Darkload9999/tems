@@ -72,6 +72,7 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/users/{id}/sessions", s.h(s.userSessions))
 		r.Delete("/users/{id}/sessions", s.h(s.revokeSessions))
 		r.Put("/users/{id}/super-admin", s.h(s.setSuperAdmin))
+		r.Post("/users/{id}/mailbox-setup", s.h(s.mailboxSetup))
 		r.Get("/users/{id}/permissions", s.h(s.memberPermissions))
 		r.Put("/users/{id}/permissions/{key}", s.h(s.setMemberPermission))
 
@@ -92,6 +93,7 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/mail", s.h(s.listMail))
 		r.Get("/mail/health", s.h(s.mailHealth))
 		r.Post("/mail/compose", s.h(s.compose))
+		r.Get("/mail/signatures", s.h(s.listSignatures))
 		r.Get("/mail/{id}", s.h(s.getMail))
 		r.Delete("/mail/{id}", s.h(s.deleteMail))
 		r.Post("/mail/{id}/resend", s.h(s.resendMail))
@@ -480,6 +482,10 @@ func (c *call) notifyTo(ev string, rs []recipient, data func(r recipient) mail.D
 			d = data(r)
 		}
 		d.Origin, d.FirstName, d.Username, d.Actor = c.s.cfg.PublicURL, r.First, r.Username, actor
+		if cat := mail.Category(ev); d.Signature == nil && cat != "" {
+			st := c.s.Settings()
+			d.Signature = st.Signature(st.SignatureFor[cat])
+		}
 		subject, html, text := mail.Render(ev, d)
 		var uid *string
 		if r.UserID != "" {

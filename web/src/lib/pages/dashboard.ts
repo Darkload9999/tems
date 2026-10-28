@@ -1,11 +1,7 @@
 import type { PageCtx } from '../app';
 import { EVENTS } from '../email';
 import { html, ico, mount, rel, stagger } from '../ui';
-
-const STACK = [
-  ['shield', 'Keycloak'], ['key', 'OpenID Connect'], ['lock', 'PKCE'], ['code', 'Go'], ['sparkle', 'Astro'],
-  ['database', 'PostgreSQL'], ['mail', 'Postfix'], ['check', 'OpenDKIM'], ['server', 'Docker'], ['activity', 'Audit trail'],
-];
+import { mailStatusTag } from './mail';
 
 export default async function dashboard({ api, me, can, main, ctx }: PageCtx) {
   const [stats, mail, audit, groups] = await Promise.all([
@@ -33,14 +29,20 @@ export default async function dashboard({ api, me, can, main, ctx }: PageCtx) {
     { t: 'Open tickets', v: stats.openTickets, s: 'Open, in progress or in review', i: 'inbox', href: '/tickets/', p: 'tickets:view', own: true },
   ];
 
-  const groupLines = (groups ?? []).map((g) => html`<span class="c-str">${g.name.padEnd(16)}</span><span class="c-com">${String(g.memberCount).padStart(3)} members  ${String(g.permissions.length).padStart(3)} perms</span>\n`);
-  const accessLines = (audit?.items ?? []).filter((a) => /perm|group\.members|superadmin/.test(a.action)).slice(0, 5)
-    .map((a) => html`<span class="c-num">${rel(a.at).padEnd(11)}</span> ${a.summary}\n`);
-  const mailLines = (mail?.items ?? []).slice(0, 6).map((m) => html`<span class="${m.status === 'sent' ? 'c-kw' : m.status === 'failed' ? 'c-num' : 'c-str'}">${(m.status === 'sent' ? '✓ sent' : m.status === 'failed' ? '✗ fail' : '… queue').padEnd(8)}</span>${m.to}\n<span class="c-com">         ${m.subject}</span>\n`);
+  const recentAudit = (audit?.items ?? []).slice(0, 6);
+  const recentMail = (mail?.items ?? []).slice(0, 6);
 
   mount(main, html`
-    <h1 class="reveal">${greet}, ${first}.</h1>
-    <p class="lede reveal" style="--i:1">You're signed in as <b>${me.username}</b>${me.superAdmin ? html` with <b>super administrator</b> rights` : html` with <b>${me.permissions.length}</b> permission${me.permissions.length === 1 ? '' : 's'}`}${me.groups.length ? html` through ${me.groups.join(', ')}` : ''}.</p>
+    <div class="welcome reveal">
+      <div>
+        <h2>${greet}, ${first}</h2>
+        <p>You're signed in as <b>${me.username}</b>${me.superAdmin ? html` with <b>super administrator</b> rights` : html` with <b>${me.permissions.length}</b> permission${me.permissions.length === 1 ? '' : 's'}`}${me.groups.length ? html` through ${me.groups.join(', ')}` : ''}.</p>
+      </div>
+      <div class="welcome-actions">
+        ${can('users:create') ? html`<a class="btn soft sm" href="/users/?new=1">${ico('userPlus')}New user</a>` : ''}
+        ${can('mail:send') ? html`<a class="btn sm" href="/mail/compose/">${ico('send')}Compose</a>` : ''}
+      </div>
+    </div>
 
     <div class="cards" id="glance">
       ${cards.filter((c) => !('own' in c) || can(c.p)).map((c) => {
@@ -49,45 +51,33 @@ export default async function dashboard({ api, me, can, main, ctx }: PageCtx) {
       })}
     </div>
 
-    <div class="marquee" aria-hidden="true"><div class="marquee-track">
-      ${[...STACK, ...STACK].map(([i, t]) => html`<span>${ico(i, 'inline-ico')}${t}</span>`)}
-    </div></div>
-
-    <h2 class="section-mega" id="flow">Group it. Grant it.<br>Everyone's told.</h2>
-    <p class="lede">Access in Techzaz EMS is plain to reason about: people sit in groups, groups carry permissions, and any member can be fine-tuned with a personal allow or deny. Whenever an admin changes something that affects a person, that person gets an email.</p>
-
-    <div class="steps">
-      <div class="step reveal-item">
-        <div class="step-head"><span class="badge-num">1</span><div><h3>Group the people</h3><p>Teams map to groups: Administrators, Support, Staff…</p></div></div>
-        <div class="codepanel"><div class="codepanel-head"><span>${ico('folder')}directory</span><span>${ico('file')}groups</span></div>
-          <pre>${groups ? groupLines : html`<span class="c-com">// needs groups:view</span>`}</pre></div>
-      </div>
-      <div class="step reveal-item">
-        <div class="step-head"><span class="badge-num">2</span><div><h3>Grant permissions</h3><p>Toggle per group, then override per member.</p></div></div>
-        <div class="codepanel"><div class="codepanel-head"><span>${ico('shield')}access</span><span>${ico('file')}recent</span></div>
-          <pre>${audit ? (accessLines.length ? accessLines : html`<span class="c-com">// no recent access changes</span>`) : html`<span class="c-com">// needs audit:view</span>`}</pre></div>
-      </div>
-      <div class="step reveal-item">
-        <div class="step-head"><span class="badge-num">3</span><div><h3>Everyone is informed</h3><p>Affected users are emailed automatically.</p></div></div>
-        <div class="codepanel"><div class="codepanel-head"><span>${ico('mail')}mail</span><span>${ico('file')}outbox.log</span></div>
-          <pre>${mail ? (mailLines.length ? mailLines : html`<span class="c-com">// outbox is empty</span>`) : html`<span class="c-com">// needs mail:view</span>`}</pre></div>
-      </div>
+    <div class="dash-grid" id="activity">
+      ${audit ? html`<section class="panel reveal-item">
+        <div class="panel-head"><h3>Recent activity</h3><a class="btn ghost sm" href="/audit/">View all</a></div>
+        ${recentAudit.length ? html`<ul class="feed">${recentAudit.map((a) => html`
+          <li><span class="feed-ico">${ico('history')}</span><div><div>${a.summary}</div><span class="muted">${a.actor} · ${rel(a.at)}</span></div></li>`)}</ul>`
+          : html`<div class="empty">${ico('history')}No activity yet.</div>`}
+      </section>` : ''}
+      ${mail ? html`<section class="panel reveal-item">
+        <div class="panel-head"><h3>Latest emails</h3><a class="btn ghost sm" href="/mail/">Outbox</a></div>
+        ${recentMail.length ? html`<ul class="feed">${recentMail.map((m) => html`
+          <li><span class="feed-ico">${ico('mail')}</span><div style="min-width:0;flex:1"><div class="ellipsis">${m.subject}</div><span class="muted">${m.toName} · ${EVENTS[m.event]?.label ?? m.event} · ${rel(m.createdAt)}</span></div>${mailStatusTag(m)}</li>`)}</ul>`
+          : html`<div class="empty">${ico('inbox')}The outbox is empty.</div>`}
+      </section>` : ''}
+      ${groups ? html`<section class="panel reveal-item">
+        <div class="panel-head"><h3>Groups</h3><a class="btn ghost sm" href="/groups/">Manage</a></div>
+        <ul class="feed">${groups.slice(0, 6).map((g) => html`
+          <li><span class="feed-ico">${ico('group')}</span><div style="flex:1"><div>${g.name}</div><span class="muted">${g.description || 'No description'}</span></div><span class="tag">${g.memberCount} member${g.memberCount === 1 ? '' : 's'}</span></li>`)}</ul>
+      </section>` : ''}
     </div>`);
   stagger(main);
-
-  // live values in the hero windows
-  const w1 = document.getElementById('w1out');
-  const w2 = document.getElementById('w2out');
-  const lastMail = mail?.items[0];
-  if (w1 && lastMail) w1.textContent = `// → last: “${lastMail.subject}” · ${rel(lastMail.createdAt)}`;
-  if (w2) w2.textContent = me.superAdmin ? '// → you hold every permission' : `// → you hold ${me.permissions.length} permission${me.permissions.length === 1 ? '' : 's'}`;
 
   const health = can('mail:view') ? await api.mailHealth().catch(() => null) : null;
   mount(ctx, html`
     <div class="ctx-card reveal" style="--i:2">
       <div class="ctx-label">On This Page:</div>
       <a href="#glance">At a glance</a>
-      <a href="#flow">How access works</a>
+      <a href="#activity">Recent activity</a>
     </div>
     <div class="ctx-card reveal" style="--i:3">
       <div class="ctx-label">Quick actions:</div>

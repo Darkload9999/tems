@@ -9,7 +9,9 @@ import type {
   Session, Settings, Stats, Ticket, TicketComment, User,
 } from './types';
 import type { Api, AuditQuery, MailQuery, PublicApi, UserQuery } from './api';
-import { EVENTS, FORCED, renderEmail, type EmailData } from './email';
+import {
+  DEFAULT_MAILBOX, DEFAULT_SIGNATURE_FOR, DEFAULT_SIGNATURES, EVENTS, FORCED, renderEmail, signatureCategory, type EmailData,
+} from './email';
 import { demoAs } from './auth';
 import { DOCS, EMPLOYMENT, HEALTH, PRIORITY, PROJECT_STATUS, TICKET_ORDER, TICKET_STATUS, TICKET_TYPE } from './hr';
 import { fullName } from './ui';
@@ -154,6 +156,9 @@ function seed(): State {
     sessionIdleMinutes: 30,
     passwordMinLength: 10,
     requiredDocuments: ['birth_certificate', 'nic', 'education'],
+    signatures: clone(DEFAULT_SIGNATURES),
+    signatureFor: { ...DEFAULT_SIGNATURE_FOR },
+    mailbox: { ...DEFAULT_MAILBOX },
   };
 
   const S: State = {
@@ -202,7 +207,18 @@ function seed(): State {
 /* ---------- persistence ---------- */
 let S: State = load();
 function load(): State {
-  try { const raw = localStorage.getItem(KEY); if (raw) return JSON.parse(raw) as State; } catch {}
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const s = JSON.parse(raw) as State;
+      // state saved before signatures and Outlook setup existed
+      s.settings.signatures ??= clone(DEFAULT_SIGNATURES);
+      s.settings.signatureFor ??= { ...DEFAULT_SIGNATURE_FOR };
+      s.settings.mailbox ??= { ...DEFAULT_MAILBOX };
+      s.settings.notifications['mailbox.setup'] ??= true;
+      return s;
+    }
+  } catch {}
   const s = seed();
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {}
   return s;
@@ -279,7 +295,9 @@ function notifyTo(ev: NotifyEvent, rs: Rcpt[], data: (r: Rcpt) => Partial<EmailD
   for (const u of rs) {
     if (!u.email || seen.has(lc(u.email))) continue;
     seen.add(lc(u.email));
-    const r = renderEmail(ev, { origin: location.origin, firstName: u.first, username: u.username, actor, ...data(u) });
+    const cat = signatureCategory(ev);
+    const signature = cat ? S.settings.signatures.find((x) => x.id === S.settings.signatureFor[cat]) ?? null : null;
+    const r = renderEmail(ev, { origin: location.origin, firstName: u.first, username: u.username, actor, signature, ...data(u) });
     const m: MailItem = {
       id: id('m_'), to: u.email, toName: u.name, userId: u.userId ?? null, subject: r.subject, event: ev,
       status: 'queued', attempts: 0, error: null, triggeredBy: actor, createdAt: now(), sentAt: null, html: r.html, text: r.text,
@@ -494,6 +512,29 @@ export const demoApi: Api = {
     audit(enabled ? 'superadmin.grant' : 'superadmin.revoke', 'user', u.id, u.username, `${enabled ? 'Granted' : 'Revoked'} super administrator for ${u.username}`);
     notify(enabled ? 'superadmin.granted' : 'superadmin.revoked', [u]);
     save();
+  },
+
+  async mailboxSetup(uid, input) {
+    await wait(320);
+    needSuper();
+    const u = userById(uid);
+    const personal = input.personalEmail.trim();
+    const note = input.note?.trim() ?? '';
+    if (personal && !EMAIL_RE.test(personal)) throw new Error('Enter a valid personal email address.');
+    if (personal && lc(personal) === lc(u.email)) throw new Error('The personal address must be different from the work email.');
+    if (input.send && !personal) throw new Error('Add a personal email address to send the setup email to.');
+    const old = u.attributes.personalEmail ?? '';
+    if (old !== personal) {
+      if (personal) u.attributes.personalEmail = personal; else delete u.attributes.personalEmail;
+      audit('user.personal_email', 'user', u.id, u.username, `Set the personal email of ${u.username}`, { changes: [`Personal email: ${old || '—'} → ${personal || '—'}`] });
+    }
+    if (input.send) {
+      notifyTo('mailbox.setup', [{ email: personal, name: fullName(u), first: u.firstName, username: u.username, userId: u.id }],
+        () => ({ workEmail: u.email, mailbox: S.settings.mailbox, note }), true);
+      audit('user.mailbox_setup', 'user', u.id, u.username, `Sent Outlook setup for ${u.email} to ${personal}`);
+    }
+    save();
+    return clone(u);
   },
 
   async memberPermissions(uid) {
@@ -729,16 +770,24 @@ export const demoApi: Api = {
     need('mail:send');
     if (!input.subject.trim()) throw new Error('Add a subject.');
     if (input.message.trim().length < 2) throw new Error('Write a message.');
+    const signature = input.signature ? S.settings.signatures.find((x) => x.id === input.signature) : null;
+    if (input.signature && !signature) throw new Error('That signature no longer exists. Pick another one.');
     const ids = new Set(input.userIds);
     S.users.forEach((u) => { if (u.groups.some((g) => input.groupIds.includes(g))) ids.add(u.id); });
     const recipients = S.users.filter((u) => ids.has(u.id) && u.enabled);
     if (!recipients.length) throw new Error('Choose at least one active recipient.');
-    const n = notify('mail.direct', recipients, () => ({ subject: input.subject.trim(), message: input.message.trim() }), true);
+    const n = notify('mail.direct', recipients, () => ({ subject: input.subject.trim(), message: input.message.trim(), signature }), true);
     audit('mail.compose', 'mail', '', `${n} recipient${n === 1 ? '' : 's'}`, `Sent “${input.subject.trim()}” to ${n} recipient${n === 1 ? '' : 's'}`, {
       users: input.userIds.length, groups: input.groupIds.map((g) => groupById(g)?.name),
     });
     save();
     return { queued: n };
+  },
+
+  async listSignatures() {
+    await wait(120);
+    need('mail:send', 'mail:manage', 'settings:manage');
+    return clone({ signatures: S.settings.signatures, signatureFor: S.settings.signatureFor });
   },
 
   async mailHealth() {
@@ -768,6 +817,19 @@ export const demoApi: Api = {
     if (next.replyTo && !EMAIL_RE.test(next.replyTo)) throw new Error('Enter a valid reply-to address.');
     if (next.passwordMinLength < 8 || next.passwordMinLength > 64) throw new Error('Minimum password length must be between 8 and 64.');
     if (next.sessionIdleMinutes < 5 || next.sessionIdleMinutes > 1440) throw new Error('Session idle timeout must be between 5 and 1440 minutes.');
+    const ids = new Set<string>();
+    for (const s of next.signatures) {
+      if (!s.team.trim()) throw new Error('Every signature needs a team name.');
+      if (s.email && !EMAIL_RE.test(s.email)) throw new Error(`Enter a valid email address for ${s.team}.`);
+      let id = (s.id || s.team).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      for (let n = 2, base = id; ids.has(id); n++) id = `${base}-${n}`;
+      ids.add(id); s.id = id;
+    }
+    for (const k of Object.keys(next.signatureFor) as (keyof Settings['signatureFor'])[])
+      if (next.signatureFor[k] && !ids.has(next.signatureFor[k])) throw new Error(`Choose an existing signature for ${k} emails.`);
+    const mb = next.mailbox;
+    if (!mb.incomingHost.trim() || !mb.outgoingHost.trim()) throw new Error('Enter valid incoming and outgoing mail server host names.');
+    if (![mb.incomingPort, mb.outgoingPort].every((p) => Number.isInteger(p) && p >= 1 && p <= 65535)) throw new Error('Mail server ports must be between 1 and 65535.');
     const changed = (Object.keys(next) as (keyof Settings)[]).filter((k) => JSON.stringify(next[k]) !== JSON.stringify(S.settings[k]));
     S.settings = clone(next);
     if (changed.length) audit('settings.update', 'settings', 'settings', 'System settings', `Updated ${changed.join(', ')}`, { changed });

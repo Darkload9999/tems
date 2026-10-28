@@ -20,6 +20,8 @@ type userAttrs struct {
 	Department string `json:"department,omitempty"`
 	JobTitle   string `json:"jobTitle,omitempty"`
 	Phone      string `json:"phone,omitempty"`
+	// PersonalEmail is set by super admins; Outlook setup emails go there.
+	PersonalEmail string `json:"personalEmail,omitempty"`
 }
 
 type apiUser struct {
@@ -54,7 +56,7 @@ func toUser(sn *dir.Snapshot, u *kc.User) apiUser {
 		ID: u.ID, Username: u.Username, Email: u.Email, FirstName: u.FirstName, LastName: u.LastName,
 		Enabled: u.Enabled, EmailVerified: u.EmailVerified, SuperAdmin: sn.Supers[u.ID],
 		Groups: nz(sn.UserGroups[u.ID]), Grants: nz(sn.Grants[u.ID]), Denies: nz(sn.Denies[u.ID]),
-		Attributes:      userAttrs{u.Attr("department"), u.Attr("jobTitle"), u.Attr("phone")},
+		Attributes:      userAttrs{u.Attr("department"), u.Attr("jobTitle"), u.Attr("phone"), u.Attr("personalEmail")},
 		RequiredActions: nz(u.RequiredActions), CreatedAt: iso(u.CreatedTimestamp),
 	}
 	if t, ok := sn.LastLogin[u.ID]; ok {

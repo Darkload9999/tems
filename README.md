@@ -23,6 +23,8 @@ Everyone a change affects is emailed.
 | **Tickets** | Per-project tasks, bugs, features and support requests (`KEY-12`), on a board or a list, with priority, due date, assignee (from the project team), comments and an activity trail. |
 | **My work** | For staff whose sign-in account is linked to their employee record: their projects and the tickets assigned to them. |
 | **Mail, Audit, Settings** | Outbox with delivery status, the full audit trail, sender identity, password policy, required onboarding documents and which events send email. |
+| **Email signatures** | Team sign-off templates (Human Resource Team, IT Department, Marketing Team, or your own) with the Techzaz Networks logo, edited in Settings with a live preview. Compose picks one per message; each kind of notification (accounts and access, people, projects and tickets) is signed by the team chosen in Settings. |
+| **Outlook setup** | Super admins add a person's personal address (e.g. Gmail) in Users → Outlook setup. That address is emailed the work email plus the IMAP/SMTP settings and step-by-step Outlook (desktop and mobile) setup. The mail servers are set in Settings → Work mailbox servers. |
 
 ## Access model
 

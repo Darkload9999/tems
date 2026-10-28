@@ -1,6 +1,6 @@
 // Notification email catalogue + renderer (table layout, inline styles, mail-client safe).
 // The Go API renders the same design server-side; this copy powers previews and demo mode.
-import type { NotifyEvent } from './types';
+import type { MailboxConfig, NotifyEvent, Signature, SignatureCategory } from './types';
 import { esc } from './ui';
 
 export const EVENTS: Record<NotifyEvent, { label: string; desc: string; group: string }> = {
@@ -13,6 +13,7 @@ export const EVENTS: Record<NotifyEvent, { label: string; desc: string; group: s
   'user.sessions_revoked':     { group: 'Security',    label: 'Signed out everywhere',     desc: 'An admin ended all active sessions' },
   'superadmin.granted':        { group: 'Security',    label: 'Super admin granted',       desc: 'Unrestricted access was granted' },
   'superadmin.revoked':        { group: 'Security',    label: 'Super admin revoked',       desc: 'Unrestricted access was removed' },
+  'mailbox.setup':             { group: 'Accounts',    label: 'Outlook setup',             desc: 'Work email and Outlook settings, sent to the personal address. Always sent.' },
   'group.member_added':        { group: 'Access',      label: 'Added to a group',          desc: 'Includes the permissions the group grants' },
   'group.member_removed':      { group: 'Access',      label: 'Removed from a group',      desc: 'Includes the permissions that were lost' },
   'group.permissions_changed': { group: 'Access',      label: 'Group permissions changed', desc: 'Sent to every member of the group' },
@@ -39,7 +40,85 @@ export const EVENTS: Record<NotifyEvent, { label: string; desc: string; group: s
 };
 
 /** Always delivered, whatever the notification settings say. */
-export const FORCED: NotifyEvent[] = ['mail.direct', 'agreement.sent'];
+export const FORCED: NotifyEvent[] = ['mail.direct', 'agreement.sent', 'mailbox.setup'];
+
+/* ---------- signatures + mailbox (same defaults as the Go API) ---------- */
+export const DEFAULT_SIGNATURES: Signature[] = [
+  { id: 'hr', team: 'Human Resource Team', company: 'Techzaz Networks (Pvt) Ltd', email: 'hr@techzaz.lk', phone: '+76 766 2071', web: 'techzaz.lk' },
+  { id: 'it', team: 'IT Department', company: 'Techzaz Networks (Pvt) Ltd', email: 'hr@techzaz.lk', phone: '+76 766 2071', web: 'techzaz.lk' },
+  { id: 'marketing', team: 'Marketing Team', company: 'Techzaz Networks (Pvt) Ltd', email: 'hr@techzaz.lk', phone: '+76 766 2071', web: 'techzaz.lk' },
+];
+export const DEFAULT_SIGNATURE_FOR: Record<SignatureCategory, string> = { accounts: 'it', people: 'hr', work: 'it' };
+export const SIGNATURE_CATEGORIES: Record<SignatureCategory, { label: string; desc: string }> = {
+  accounts: { label: 'Accounts & access', desc: 'Accounts, security, groups, permissions and Outlook setup' },
+  people:   { label: 'People',            desc: 'Onboarding, employee records and agreements' },
+  work:     { label: 'Projects & tickets', desc: 'Project assignments, status updates and tickets' },
+};
+export const DEFAULT_MAILBOX: MailboxConfig = {
+  incomingHost: 'mail.techzaz.lk', incomingPort: 993, incomingSecurity: 'SSL/TLS',
+  outgoingHost: 'mail.techzaz.lk', outgoingPort: 587, outgoingSecurity: 'STARTTLS',
+  webmail: 'https://mail.techzaz.lk',
+};
+
+/** Which signature category signs an event ('' for direct messages, which pick their own). */
+export function signatureCategory(ev: NotifyEvent): SignatureCategory | '' {
+  if (ev === 'mail.direct') return '';
+  if (ev.startsWith('employee.') || ev.startsWith('agreement.')) return 'people';
+  if (ev.startsWith('project.') || ev.startsWith('ticket.')) return 'work';
+  return 'accounts';
+}
+
+const webHref = (w: string) => (/^https?:\/\//.test(w) ? w : `https://${w}`);
+const webLabel = (w: string) => w.replace(/^https?:\/\//, '').replace(/\/$/, '');
+const telHref = (p: string) => `tel:${p.replace(/[^+\d]/g, '')}`;
+
+/** A signature as an email-safe table in the copper brand palette. */
+export function signatureHtml(s: Signature | null | undefined, origin: string): string {
+  if (!s?.team) return '';
+  const row = (label: string, value: string, href: string) => value
+    ? `<tr><td style="padding:1px 10px 1px 0;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#b98a63">${label}</td><td style="padding:1px 0;font-size:13px"><a href="${esc(href)}" style="color:#5b3d28;text-decoration:none">${esc(value)}</a></td></tr>`
+    : '';
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 6px;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif"><tr>`
+    + `<td style="padding:0 18px 0 0;vertical-align:middle"><img src="${esc(origin)}/brand/logo-full.png" width="112" alt="Techzaz Networks" style="display:block;width:112px;height:auto"></td>`
+    + `<td style="width:3px;background:#c99a72;background-image:linear-gradient(180deg,#e8c39f,#a86f45);border-radius:3px;font-size:0;line-height:0">&nbsp;</td>`
+    + `<td style="padding:2px 0 2px 16px;vertical-align:middle;line-height:1.5">`
+    + `<div style="font-size:15px;font-weight:700;color:#4a2f1d;letter-spacing:.005em">${esc(s.team)}</div>`
+    + (s.company ? `<div style="font-size:13px;color:#8a6a52;margin-bottom:6px">${esc(s.company)}</div>` : '')
+    + `<table role="presentation" cellpadding="0" cellspacing="0">${row('Email', s.email, `mailto:${s.email}`)}${row('Mobile', s.phone, telHref(s.phone))}${s.web ? row('Web', webLabel(s.web), webHref(s.web)) : ''}</table>`
+    + `</td></tr></table>`;
+}
+
+const signatureText = (s: Signature | null | undefined) => !s?.team ? [] : [
+  '--', s.team, s.company, s.email && `Email: ${s.email}`, s.phone && `Mobile: ${s.phone}`, s.web && `Web: ${webLabel(s.web)}`,
+].filter(Boolean) as string[];
+
+const mailboxRows = (work: string, m: MailboxConfig): [string, string][] => [
+  ['Email address', work],
+  ['Account type', 'IMAP'],
+  ['Incoming server', `${m.incomingHost} · port ${m.incomingPort} · ${m.incomingSecurity}`],
+  ['Outgoing server (SMTP)', `${m.outgoingHost} · port ${m.outgoingPort} · ${m.outgoingSecurity}`],
+  ['User name', work],
+  ['Password', 'Your mailbox password (shared with you separately by IT)'],
+  ['Outgoing authentication', 'Required · same user name and password'],
+];
+const OUTLOOK_STEPS = [
+  'Open Outlook and go to <b>File → Add account</b> (on the new Outlook: <b>Settings → Accounts → Add account</b>).',
+  'Enter your work email address, open <b>Advanced options</b>, tick <b>Let me set up my account manually</b> and select <b>Connect</b>.',
+  'Choose <b>IMAP</b> and enter the incoming and outgoing server settings above.',
+  'Enter your mailbox password, select <b>Connect</b>, then <b>Done</b>. Your inbox syncs in a minute or two.',
+  'On your phone: install <b>Microsoft Outlook</b>, tap <b>Add account</b>, enter your work email, choose <b>IMAP</b> and use the same settings.',
+];
+const mailboxHtml = (work: string, m: MailboxConfig) =>
+  `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1ecfd;border-radius:12px;margin:4px 0 18px"><tr><td style="padding:16px 18px">`
+  + `<div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#6d6884;margin-bottom:8px">Outlook account settings</div>`
+  + `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${mailboxRows(work, m).map(([k, v]) => `<tr><td style="padding:5px 12px 5px 0;font-size:13px;color:#6d6884;white-space:nowrap;vertical-align:top">${esc(k)}</td><td style="padding:5px 0;font-family:'JetBrains Mono',Consolas,monospace;font-size:13px;color:#2a1066">${esc(v)}</td></tr>`).join('')}</table></td></tr></table>`
+  + `<p style="margin:0 0 8px;font-weight:700">Set it up in Outlook</p><ol style="margin:0 0 16px;padding-left:20px">${OUTLOOK_STEPS.map((s) => `<li style="margin:0 0 6px">${s}</li>`).join('')}</ol>`
+  + (m.webmail ? `<p style="margin:0 0 14px">You can also read your mail in a browser at <a href="${esc(webHref(m.webmail))}" style="color:#5b3fd6">${esc(webLabel(m.webmail))}</a>.</p>` : '');
+const mailboxText = (work: string, m: MailboxConfig) => [
+  '', 'Outlook account settings', ...mailboxRows(work, m).map(([k, v]) => `  ${k}: ${v}`),
+  '', 'Set it up in Outlook', ...OUTLOOK_STEPS.map((s, i) => `  ${i + 1}. ${s.replace(/<[^>]+>/g, '')}`),
+  ...(m.webmail ? ['', `Webmail: ${webHref(m.webmail)}`] : []),
+];
 
 export interface EmailData {
   origin: string;
@@ -61,6 +140,9 @@ export interface EmailData {
   project?: string;
   note?: string;
   expires?: string;
+  workEmail?: string;          // mailbox.setup: the work address being set up
+  mailbox?: MailboxConfig;     // mailbox.setup: server settings (defaults when absent)
+  signature?: Signature | null; // team sign-off
 }
 
 interface Copy { subject: string; title: string; lead: string; body?: string; cta?: string; tone?: 'warn' | 'ok' }
@@ -92,6 +174,9 @@ function copyFor(ev: NotifyEvent, d: EmailData): Copy {
       lead: d.setup === 'temporary'
         ? 'An administrator reset your password. They will share a temporary password with you, and you will choose a new one on your next sign-in.'
         : 'An administrator reset your password. You will receive a separate email with a secure link to choose a new one.' };
+    case 'mailbox.setup': return {
+      subject: `Your Techzaz work email is ready: ${d.workEmail}`, title: 'Your mailbox.', tone: 'ok', cta: 'Sign in to Techzaz EMS',
+      lead: `Your Techzaz Networks work email <b>${esc(d.workEmail)}</b> is ready. We sent these setup details to your personal address so you can add it to Outlook on your computer and phone.` };
     case 'user.sessions_revoked': return {
       subject: 'You were signed out of all devices', title: 'Signed out.', tone: 'warn',
       lead: 'An administrator ended all of your active sessions. Sign in again to continue.', cta: 'Sign in' };
@@ -170,6 +255,8 @@ export function renderEmail(ev: NotifyEvent, d: EmailData): { subject: string; h
     ? esc(d.message).split(/\n{2,}/).map((p) => `<p style="margin:0 0 14px">${p.replace(/\n/g, '<br>')}</p>`).join('')
     : '';
   const when = new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+  const mb = d.mailbox ?? DEFAULT_MAILBOX;
+  const sent = ev === 'mail.direct' || ev === 'agreement.sent' || ev === 'mailbox.setup';
 
   const html = `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(c.subject)}</title><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;700&family=Plus+Jakarta+Sans:wght@400;700&display=swap" rel="stylesheet"></head>
@@ -188,11 +275,13 @@ export function renderEmail(ev: NotifyEvent, d: EmailData): { subject: string; h
   <p style="margin:0 0 14px">Hi ${esc(d.firstName || d.username || 'there')},</p>
   ${c.lead ? `<p style="margin:0 0 14px">${c.lead}</p>` : ''}
   ${message}
+  ${ev === 'mailbox.setup' ? mailboxHtml(d.workEmail ?? '', mb) : ''}
   ${listRows ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1ecfd;border-radius:12px;margin:4px 0 18px"><tr><td style="padding:14px 18px"><table role="presentation" cellpadding="0" cellspacing="0">${listRows}</table></td></tr></table>` : ''}
   ${d.note ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px"><tr><td style="border-left:3px solid ${accent};background:#f7f4fd;border-radius:0 10px 10px 0;padding:12px 16px;font-size:14px;color:#3a3647">${esc(d.note).replace(/\n/g, '<br>')}</td></tr></table>` : ''}
   ${c.body ? `<p style="margin:0 0 14px">${esc(c.body)}</p>` : ''}
   ${c.cta ? `<p style="margin:22px 0 22px"><a href="${esc(d.link || d.origin)}" style="display:inline-block;background:#22094d;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">${esc(c.cta)} &rarr;</a></p>` : ''}
-  <p style="margin:18px 0 0;padding-top:16px;border-top:1px solid #ece7f6;font-size:12.5px;color:#6d6884">${ev === 'mail.direct' || ev === 'agreement.sent' ? 'Sent' : 'Changed'} by ${esc(d.actor)} · ${esc(when)}.<br>If you did not expect this email, contact <a href="mailto:soc@techzaz.lk" style="color:#5b3fd6">soc@techzaz.lk</a>.</p>
+  ${signatureHtml(d.signature, d.origin)}
+  <p style="margin:18px 0 0;padding-top:16px;border-top:1px solid #ece7f6;font-size:12.5px;color:#6d6884">${sent ? 'Sent' : 'Changed'} by ${esc(d.actor)} · ${esc(when)}.<br>If you did not expect this email, contact <a href="mailto:soc@techzaz.lk" style="color:#5b3fd6">soc@techzaz.lk</a>.</p>
 </td></tr>
 <tr><td style="padding:16px 30px 22px;font-size:11.5px;color:#9a95ad;line-height:1.6">Techzaz Networks · 476/2 Sri Rajasinghe Mawatha, Wattala 11104, Sri Lanka<br>This is an automated message from Techzaz EMS. Please do not reply.</td></tr>
 </table></td></tr></table></body></html>`;
@@ -201,10 +290,11 @@ export function renderEmail(ev: NotifyEvent, d: EmailData): { subject: string; h
   const text = [
     `Hi ${d.firstName || d.username || 'there'},`, '',
     strip(c.lead), ev === 'mail.direct' ? (d.message ?? '') : '',
+    ...(ev === 'mailbox.setup' ? mailboxText(d.workEmail ?? '', mb) : []),
     ...(d.added ?? []).map((x) => `+ ${x}`), ...(d.removed ?? []).map((x) => `- ${x}`), ...(d.changes ?? []).map((x) => `* ${x}`),
     d.note ? `> ${d.note.replace(/\n/g, '\n> ')}` : '',
-    c.body ?? '', c.cta ? `${c.cta}: ${d.link || d.origin}` : '', '',
-    `${ev === 'mail.direct' || ev === 'agreement.sent' ? 'Sent' : 'Changed'} by ${d.actor} · ${when}.`, 'Techzaz Networks — automated message from Techzaz EMS.',
+    c.body ?? '', c.cta ? `${c.cta}: ${d.link || d.origin}` : '', '', ...signatureText(d.signature), '',
+    `${sent ? 'Sent' : 'Changed'} by ${d.actor} · ${when}.`, 'Techzaz Networks — automated message from Techzaz EMS.',
   ].filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n');
 
   return { subject: c.subject, html, text };

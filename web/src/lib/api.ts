@@ -3,7 +3,7 @@
 import type {
   Agreement, AuditEntry, ComposeInput, DocCategory, Employee, EmployeeDocument, EmployeeEvent, EmployeeInput,
   EmployeeStage, Group, MailItem, MailStatus, Me, MemberPermission, Page, Payroll, PermState, Permission, Project,
-  ProjectHealth, ProjectInput, ProjectStatus, ProjectUpdate, PublicAgreement, Session, Settings, Stats, Ticket,
+  ProjectHealth, ProjectInput, ProjectStatus, ProjectUpdate, PublicAgreement, Session, Settings, Signature, SignatureCategory, Stats, Ticket,
   TicketComment, TicketInput, TicketPriority, TicketStatus, TicketType, User, UserInput,
 } from './types';
 import { DEMO, token } from './auth';
@@ -37,6 +37,8 @@ export interface Api {
   sessions(id: string): Promise<Session[]>;
   revokeSessions(id: string): Promise<void>;
   setSuperAdmin(id: string, enabled: boolean): Promise<void>;
+  /** Super admins: save a personal email and (send) email it the Outlook setup for the work address. */
+  mailboxSetup(id: string, input: { personalEmail: string; note?: string; send: boolean }): Promise<User>;
   memberPermissions(userId: string): Promise<MemberPermission[]>;
   setMemberPermission(userId: string, key: string, state: PermState): Promise<MemberPermission[]>;
 
@@ -59,6 +61,7 @@ export interface Api {
   resendMail(id: string): Promise<MailItem>;
   deleteMail(id: string): Promise<void>;
   compose(input: ComposeInput): Promise<{ queued: number }>;
+  listSignatures(): Promise<{ signatures: Signature[]; signatureFor: Record<SignatureCategory, string> }>;
   mailHealth(): Promise<MailHealth>;
 
   listAudit(q?: AuditQuery): Promise<Page<AuditEntry>>;
@@ -156,6 +159,7 @@ const http: Api = {
   sessions: (id) => call('GET', `/users/${e(id)}/sessions`),
   revokeSessions: (id) => call('DELETE', `/users/${e(id)}/sessions`),
   setSuperAdmin: (id, enabled) => call('PUT', `/users/${e(id)}/super-admin`, { enabled }),
+  mailboxSetup: (id, input) => call('POST', `/users/${e(id)}/mailbox-setup`, input),
   memberPermissions: (id) => call('GET', `/users/${e(id)}/permissions`),
   setMemberPermission: (id, key, state) => call('PUT', `/users/${e(id)}/permissions/${e(key)}`, { state }),
 
@@ -178,6 +182,7 @@ const http: Api = {
   resendMail: (id) => call('POST', `/mail/${e(id)}/resend`),
   deleteMail: (id) => call('DELETE', `/mail/${e(id)}`),
   compose: (input) => call('POST', '/mail/compose', input),
+  listSignatures: () => call('GET', '/mail/signatures'),
   mailHealth: () => call('GET', '/mail/health'),
 
   listAudit: (q = {}) => call('GET', `/audit${qs(q)}`),

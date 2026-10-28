@@ -142,10 +142,11 @@ func (s *Server) compose(c *call) error {
 		return err
 	}
 	var in struct {
-		UserIDs  []string `json:"userIds"`
-		GroupIDs []string `json:"groupIds"`
-		Subject  string   `json:"subject"`
-		Message  string   `json:"message"`
+		UserIDs   []string `json:"userIds"`
+		GroupIDs  []string `json:"groupIds"`
+		Subject   string   `json:"subject"`
+		Message   string   `json:"message"`
+		Signature string   `json:"signature"`
 	}
 	if err := c.decode(&in); err != nil {
 		return err
@@ -156,6 +157,10 @@ func (s *Server) compose(c *call) error {
 	}
 	if len(in.Message) < 2 || len(in.Message) > 20000 {
 		return errf(400, "Write a message (up to 20,000 characters).")
+	}
+	sig := s.Settings().Signature(in.Signature)
+	if in.Signature != "" && sig == nil {
+		return errf(400, "That signature no longer exists. Pick another one.")
 	}
 	sn, err := c.snap()
 	if err != nil {
@@ -183,7 +188,7 @@ func (s *Server) compose(c *call) error {
 	if len(recipients) == 0 {
 		return errf(400, "Choose at least one active recipient.")
 	}
-	c.notify("mail.direct", recipients, func(*kc.User) tmail.Data { return tmail.Data{Subject: in.Subject, Message: in.Message} }, true)
+	c.notify("mail.direct", recipients, func(*kc.User) tmail.Data { return tmail.Data{Subject: in.Subject, Message: in.Message, Signature: sig} }, true)
 	n := c.notified
 	c.audit("mail.compose", "mail", "", fmt.Sprintf("%d recipient%s", n, plural(n)),
 		fmt.Sprintf("Sent “%s” to %d recipient%s", in.Subject, n, plural(n)), map[string]any{"users": len(in.UserIDs), "groups": groupNames})
@@ -225,6 +230,26 @@ type Settings struct {
 	SessionIdleMinutes int             `json:"sessionIdleMinutes"`
 	PasswordMinLength  int             `json:"passwordMinLength"`
 	RequiredDocuments  []string        `json:"requiredDocuments"`
+	// Team sign-offs, which one signs each category of notification, and the
+	// work mailbox servers sent in Outlook setup emails.
+	Signatures   []tmail.Signature `json:"signatures"`
+	SignatureFor map[string]string `json:"signatureFor"`
+	Mailbox      tmail.Mailbox     `json:"mailbox"`
+}
+
+func defaultSignatureFor() map[string]string {
+	return map[string]string{"accounts": "it", "people": "hr", "work": "it"}
+}
+
+// Signature finds a signature template by id (nil when unset or unknown).
+func (st Settings) Signature(id string) *tmail.Signature {
+	for i := range st.Signatures {
+		if st.Signatures[i].ID == id {
+			s := st.Signatures[i]
+			return &s
+		}
+	}
+	return nil
 }
 
 var defaultRequiredDocs = []string{"birth_certificate", "nic", "education"}
@@ -237,6 +262,7 @@ func (s *Server) defaults() Settings {
 	return Settings{
 		OrgName: "Techzaz Networks", MailFromName: s.cfg.MailFromName, MailFrom: s.cfg.MailFrom, ReplyTo: "soc@techzaz.lk",
 		Notifications: n, SessionIdleMinutes: 30, PasswordMinLength: 10, RequiredDocuments: defaultRequiredDocs,
+		Signatures: append([]tmail.Signature(nil), tmail.DefaultSignatures...), SignatureFor: defaultSignatureFor(), Mailbox: tmail.DefaultMailbox,
 	}
 }
 
@@ -254,6 +280,15 @@ func (s *Server) LoadSettings(ctx context.Context) error {
 	}
 	if st.RequiredDocuments == nil {
 		st.RequiredDocuments = defaultRequiredDocs
+	}
+	if st.Signatures == nil { // settings saved before signatures existed
+		st.Signatures = append([]tmail.Signature(nil), tmail.DefaultSignatures...)
+	}
+	if st.SignatureFor == nil {
+		st.SignatureFor = defaultSignatureFor()
+	}
+	if st.Mailbox.IncomingHost == "" {
+		st.Mailbox = tmail.DefaultMailbox
 	}
 	if !found {
 		if err := s.st.SaveSettings(ctx, st); err != nil {
@@ -326,6 +361,7 @@ func (s *Server) saveSettings(c *call) error {
 		return errf(400, "Add a sender name.")
 	}
 	clean := s.defaults()
+	var err error
 	for k := range clean.Notifications {
 		if v, ok := in.Notifications[k]; ok {
 			clean.Notifications[k] = v
@@ -347,6 +383,19 @@ func (s *Server) saveSettings(c *call) error {
 	}
 	clean.OrgName, clean.MailFromName, clean.MailFrom, clean.ReplyTo = strings.TrimSpace(in.OrgName), strings.TrimSpace(in.MailFromName), in.MailFrom, in.ReplyTo
 	clean.SessionIdleMinutes, clean.PasswordMinLength = in.SessionIdleMinutes, in.PasswordMinLength
+	if clean.Signatures, err = cleanSignatures(in.Signatures); err != nil {
+		return err
+	}
+	for _, k := range tmail.Categories {
+		id := in.SignatureFor[k]
+		if id != "" && clean.Signature(id) == nil {
+			return errf(400, "Choose an existing signature for %s emails.", k)
+		}
+		clean.SignatureFor[k] = id
+	}
+	if clean.Mailbox, err = cleanMailbox(in.Mailbox); err != nil {
+		return err
+	}
 
 	realm := map[string]any{
 		"ssoSessionIdleTimeout": clean.SessionIdleMinutes * 60,
@@ -376,6 +425,12 @@ func (s *Server) saveSettings(c *call) error {
 	}
 	if strings.Join(old.RequiredDocuments, ",") != strings.Join(clean.RequiredDocuments, ",") {
 		changed = append(changed, "required documents")
+	}
+	if fmt.Sprint(old.Signatures, old.SignatureFor) != fmt.Sprint(clean.Signatures, clean.SignatureFor) {
+		changed = append(changed, "email signatures")
+	}
+	if old.Mailbox != clean.Mailbox {
+		changed = append(changed, "mailbox settings")
 	}
 	for k, v := range clean.Notifications {
 		if old.Notifications[k] != v {
