@@ -731,11 +731,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .sig-card { display: flex; flex-direction: column; gap: 4px; padding: 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); }
 .sig-fields { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0 12px; }
 .sig-fields .field { margin-bottom: 10px; grid-column: span 2; }
-.sig-fields .field:nth-child(n+4) { grid-column: span 3; }
 .sig-side { display: flex; gap: 12px; align-items: flex-end; }
 .sig-preview { flex: 1; min-width: 0; padding: 4px 20px; border-radius: 12px; background: #fff; border: 1px solid var(--line); color: #1c1b20; overflow-x: auto; }
 .sig-preview > table { margin: 14px 0 !important; }
-@container (max-width: 760px) { .sig-fields { grid-template-columns: 1fr 1fr; } .sig-fields .field, .sig-fields .field:nth-child(n+4) { grid-column: auto; } .sig-side { flex-direction: column; align-items: stretch; } .grid-3 { grid-template-columns: 1fr 1fr; } }
+@container (max-width: 760px) { .sig-fields { grid-template-columns: 1fr 1fr; } .sig-fields .field { grid-column: auto; } .sig-side { flex-direction: column; align-items: stretch; } .grid-3 { grid-template-columns: 1fr 1fr; } }
 
 /* skeleton */
 .skel { border-radius: 8px; background: linear-gradient(90deg, var(--surface-2) 0%, var(--line) 50%, var(--surface-2) 100%); background-size: 200% 100%; animation: shimmer 1.3s linear infinite; }

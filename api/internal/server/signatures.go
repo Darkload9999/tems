@@ -21,7 +21,7 @@ func cleanSignatures(in []tmail.Signature) ([]tmail.Signature, error) {
 	out := []tmail.Signature{}
 	seen := map[string]bool{}
 	for _, s := range in {
-		s.Name, s.Title, s.Email = strings.TrimSpace(s.Name), strings.TrimSpace(s.Title), strings.TrimSpace(s.Email)
+		s.Name, s.Title, s.Company, s.Email = strings.TrimSpace(s.Name), strings.TrimSpace(s.Title), strings.TrimSpace(s.Company), strings.TrimSpace(s.Email)
 		s.Phone, s.Web = strings.TrimSpace(s.Phone), strings.TrimSpace(s.Web)
 		if s.Name == "" {
 			return nil, errf(400, "Every signature needs a name.")
@@ -29,7 +29,7 @@ func cleanSignatures(in []tmail.Signature) ([]tmail.Signature, error) {
 		if s.Email != "" && !validEmail(s.Email) {
 			return nil, errf(400, "Enter a valid email address for %s.", s.Name)
 		}
-		for _, v := range []string{s.Name, s.Title, s.Email, s.Phone, s.Web} {
+		for _, v := range []string{s.Name, s.Title, s.Company, s.Email, s.Phone, s.Web} {
 			if len(v) > 120 {
 				return nil, errf(400, "Signature fields are limited to 120 characters.")
 			}

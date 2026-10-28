@@ -113,7 +113,8 @@ export default async function settings({ api, me, main, ctx, cleanup, refreshShe
       <div class="sig-card">
         <div class="sig-fields">
           <div class="field"><label for="sg-name-${i}">Name or team</label><input class="input" id="sg-name-${i}" data-sig="${i}" data-f="name" value="${s.name}"></div>
-          <div class="field"><label for="sg-title-${i}">Title</label><input class="input" id="sg-title-${i}" data-sig="${i}" data-f="title" value="${s.title}" placeholder="e.g. Chief executive officer"></div>
+          <div class="field"><label for="sg-title-${i}">Job title</label><input class="input" id="sg-title-${i}" data-sig="${i}" data-f="title" value="${s.title}" placeholder="People only, e.g. Head of Engineering"></div>
+          <div class="field"><label for="sg-co-${i}">Company</label><input class="input" id="sg-co-${i}" data-sig="${i}" data-f="company" value="${s.company}"></div>
           <div class="field"><label for="sg-em-${i}">Email</label><input class="input" id="sg-em-${i}" type="email" data-sig="${i}" data-f="email" value="${s.email}"></div>
           <div class="field"><label for="sg-ph-${i}">Mobile</label><input class="input" id="sg-ph-${i}" data-sig="${i}" data-f="phone" value="${s.phone}"></div>
           <div class="field"><label for="sg-web-${i}">Web</label><input class="input" id="sg-web-${i}" data-sig="${i}" data-f="web" value="${s.web}"></div>
@@ -159,7 +160,7 @@ export default async function settings({ api, me, main, ctx, cleanup, refreshShe
   });
   on(main, 'click', '#sigAdd', () => {
     const n = draft.signatures.length + 1;
-    draft.signatures.push({ id: `sig-${Date.now().toString(36)}`, name: `New signature ${n}`, title: '', email: '', phone: '', web: 'www.techzaz.lk' });
+    draft.signatures.push({ id: `sig-${Date.now().toString(36)}`, name: `New signature ${n}`, title: '', company: draft.signatures[0]?.company ?? 'Techzaz Networks (Pvt) Ltd', email: '', phone: draft.signatures[0]?.phone ?? '', web: draft.signatures[0]?.web ?? 'Techzaz.lk' });
     drawSigs(); drawBar();
     $<HTMLInputElement>(`#sg-name-${n - 1}`, main)?.select();
   });

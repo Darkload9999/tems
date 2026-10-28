@@ -43,11 +43,20 @@ export const EVENTS: Record<NotifyEvent, { label: string; desc: string; group: s
 export const FORCED: NotifyEvent[] = ['mail.direct', 'agreement.sent', 'mailbox.setup'];
 
 /* ---------- signatures + mailbox (same defaults as the Go API) ---------- */
+const sig = (id: string, name: string, title: string, email: string): Signature =>
+  ({ id, name, title, company: 'Techzaz Networks (Pvt) Ltd', email, phone: '+76 766 2071', web: 'Techzaz.lk' });
+/** Seeded templates (leadership first, then departments); same as the Go API. */
 export const DEFAULT_SIGNATURES: Signature[] = [
-  { id: 'ceo', name: 'Saeed Ahamed', title: 'Chief executive officer', email: 'ceo@techzaz.lk', phone: '+974 3994 9696', web: 'www.techzaz.lk' },
-  { id: 'hr', name: 'Human Resource Team', title: 'Techzaz Networks (Pvt) Ltd', email: 'hr@techzaz.lk', phone: '+76 766 2071', web: 'www.techzaz.lk' },
-  { id: 'it', name: 'IT Department', title: 'Techzaz Networks (Pvt) Ltd', email: 'hr@techzaz.lk', phone: '+76 766 2071', web: 'www.techzaz.lk' },
-  { id: 'marketing', name: 'Marketing Team', title: 'Techzaz Networks (Pvt) Ltd', email: 'hr@techzaz.lk', phone: '+76 766 2071', web: 'www.techzaz.lk' },
+  sig('ceo', 'SAEED AHAMED', 'Chief Executive Officer', 'ceo@techzaz.lk'),
+  sig('head-of-engineering', 'LAKSHITHA PERERA', 'Head of Engineering', 'lakshitha@techzaz.lk'),
+  sig('hr', 'Human Resource Team', '', 'hr@techzaz.lk'),
+  sig('it', 'IT Department', '', 'itdept@techzaz.lk'),
+  sig('marketing', 'Marketing Department', '', 'marketing@techzaz.lk'),
+  sig('admin', 'Admin Department', '', 'info@techzaz.lk'),
+  sig('sales', 'Sales Department', '', 'sales@techzaz.lk'),
+  sig('operations', 'Operations Department', '', 'operations@techzaz.lk'),
+  sig('support', 'Support Team', '', 'support@techzaz.lk'),
+  sig('soc', 'Cyber Security Department', '', 'soc@techzaz.lk'),
 ];
 export const DEFAULT_DISCLAIMER = 'Disclaimer: The contents of this email message and any attachments are intended solely for the addressee(s) and may contain confidential and/or privileged information and may be legally protected from disclosure. If you are not the intended recipient of this message or their agent, or if this message has been addressed to you in error, please immediately alert the sender by reply email and then delete this message and any attachments. If you are not the intended recipient, you are hereby notified that any use, relying on, taking action, publish, alter, dissemination, copying, or storage of this message or its attachments is strictly prohibited.';
 export const DEFAULT_FOOTER: SignatureFooter = { hideBadges: false, disclaimer: DEFAULT_DISCLAIMER };
@@ -91,7 +100,8 @@ export function signatureHtml(s: Signature | null | undefined, f: SignatureFoote
     + `<td style="width:3px;background:#8b6a3e;font-size:0;line-height:0">&nbsp;</td>`
     + `<td style="padding:2px 0 2px 12px;vertical-align:middle;font-size:13px;line-height:1.45;color:#7a5530">`
     + `<div style="font-size:14px;font-weight:700;color:#5c3d1e">${esc(s.name)}</div>`
-    + (s.title ? `<div>${esc(s.title)}</div>` : '')
+    + (s.title ? `<div style="font-size:14px;font-weight:700;color:#5c3d1e">${esc(s.title)}</div>` : '')
+    + (s.company ? `<div>${esc(s.company)}</div>` : '')
     + line('Email', s.email, `mailto:${s.email}`) + line('Mobile', s.phone, telHref(s.phone)) + (s.web ? line('Web', webLabel(s.web), webHref(s.web)) : '')
     + `</td></tr></table>`
     + (f.hideBadges ? '' : `<img src="${esc(origin)}/brand/partners.png" width="200" alt="AWS Partner · Google Cloud Partner" style="display:block;width:200px;height:auto;margin:18px 0 4px">`)
@@ -101,7 +111,7 @@ export function signatureHtml(s: Signature | null | undefined, f: SignatureFoote
 
 function signatureText(s: Signature | null | undefined, f: SignatureFooter): string[] {
   if (!s?.name) return [];
-  const t = ['--', s.name, s.title, s.email && `Email: ${s.email}`, s.phone && `Mobile: ${s.phone}`, s.web && `Web: ${webLabel(s.web)}`]
+  const t = ['--', s.name, s.title, s.company, s.email && `Email: ${s.email}`, s.phone && `Mobile: ${s.phone}`, s.web && `Web: ${webLabel(s.web)}`]
     .filter(Boolean) as string[];
   if (!f.hideBadges) t.push('AWS Partner · Google Cloud Partner');
   if (f.disclaimer.trim()) t.push('', STARS, '', f.disclaimer.trim(), '', STARS);

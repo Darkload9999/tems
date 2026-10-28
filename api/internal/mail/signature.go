@@ -6,13 +6,15 @@ import (
 )
 
 // Signature is a person's or team's sign-off appended to emails (Settings → Email signatures).
+// People have a job title; teams usually leave it empty.
 type Signature struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Title string `json:"title"`
-	Email string `json:"email"`
-	Phone string `json:"phone"`
-	Web   string `json:"web"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Title   string `json:"title"`
+	Company string `json:"company"`
+	Email   string `json:"email"`
+	Phone   string `json:"phone"`
+	Web     string `json:"web"`
 }
 
 // Footer follows every signature: the partner badges and the legal disclaimer.
@@ -21,12 +23,22 @@ type Footer struct {
 	Disclaimer string `json:"disclaimer"`
 }
 
-// DefaultSignatures are the seeded templates.
+func sig(id, name, title, email string) Signature {
+	return Signature{ID: id, Name: name, Title: title, Company: "Techzaz Networks (Pvt) Ltd", Email: email, Phone: "+76 766 2071", Web: "Techzaz.lk"}
+}
+
+// DefaultSignatures are the seeded templates (leadership first, then departments).
 var DefaultSignatures = []Signature{
-	{ID: "ceo", Name: "Saeed Ahamed", Title: "Chief executive officer", Email: "ceo@techzaz.lk", Phone: "+974 3994 9696", Web: "www.techzaz.lk"},
-	{ID: "hr", Name: "Human Resource Team", Title: "Techzaz Networks (Pvt) Ltd", Email: "hr@techzaz.lk", Phone: "+76 766 2071", Web: "www.techzaz.lk"},
-	{ID: "it", Name: "IT Department", Title: "Techzaz Networks (Pvt) Ltd", Email: "hr@techzaz.lk", Phone: "+76 766 2071", Web: "www.techzaz.lk"},
-	{ID: "marketing", Name: "Marketing Team", Title: "Techzaz Networks (Pvt) Ltd", Email: "hr@techzaz.lk", Phone: "+76 766 2071", Web: "www.techzaz.lk"},
+	sig("ceo", "SAEED AHAMED", "Chief Executive Officer", "ceo@techzaz.lk"),
+	sig("head-of-engineering", "LAKSHITHA PERERA", "Head of Engineering", "lakshitha@techzaz.lk"),
+	sig("hr", "Human Resource Team", "", "hr@techzaz.lk"),
+	sig("it", "IT Department", "", "itdept@techzaz.lk"),
+	sig("marketing", "Marketing Department", "", "marketing@techzaz.lk"),
+	sig("admin", "Admin Department", "", "info@techzaz.lk"),
+	sig("sales", "Sales Department", "", "sales@techzaz.lk"),
+	sig("operations", "Operations Department", "", "operations@techzaz.lk"),
+	sig("support", "Support Team", "", "support@techzaz.lk"),
+	sig("soc", "Cyber Security Department", "", "soc@techzaz.lk"),
 }
 
 const DefaultDisclaimer = "Disclaimer: The contents of this email message and any attachments are intended solely for the addressee(s) and may contain confidential and/or privileged information and may be legally protected from disclosure. If you are not the intended recipient of this message or their agent, or if this message has been addressed to you in error, please immediately alert the sender by reply email and then delete this message and any attachments. If you are not the intended recipient, you are hereby notified that any use, relying on, taking action, publish, alter, dissemination, copying, or storage of this message or its attachments is strictly prohibited."
@@ -109,7 +121,10 @@ func SignatureHTML(s *Signature, f Footer, origin string) string {
 	b.WriteString(`<td style="padding:2px 0 2px 12px;vertical-align:middle;font-size:13px;line-height:1.45;color:#7a5530">`)
 	fmt.Fprintf(&b, `<div style="font-size:14px;font-weight:700;color:#5c3d1e">%s</div>`, e(s.Name))
 	if s.Title != "" {
-		fmt.Fprintf(&b, `<div>%s</div>`, e(s.Title))
+		fmt.Fprintf(&b, `<div style="font-size:14px;font-weight:700;color:#5c3d1e">%s</div>`, e(s.Title))
+	}
+	if s.Company != "" {
+		fmt.Fprintf(&b, `<div>%s</div>`, e(s.Company))
 	}
 	b.WriteString(line("Email", s.Email, "mailto:"+s.Email))
 	b.WriteString(line("Mobile", s.Phone, telHref(s.Phone)))
@@ -134,8 +149,10 @@ func SignatureText(s *Signature, f Footer) []string {
 		return nil
 	}
 	t := []string{"--", s.Name}
-	if s.Title != "" {
-		t = append(t, s.Title)
+	for _, v := range []string{s.Title, s.Company} {
+		if v != "" {
+			t = append(t, v)
+		}
 	}
 	if s.Email != "" {
 		t = append(t, "Email: "+s.Email)

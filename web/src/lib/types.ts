@@ -108,11 +108,12 @@ export type NotifyEvent =
   | 'mailbox.setup'
   | 'mail.direct';
 
-/** A person's or team's sign-off appended to emails. */
+/** A person's or team's sign-off appended to emails. People have a job title; teams usually leave it empty. */
 export interface Signature {
   id: string;
   name: string;
   title: string;
+  company: string;
   email: string;
   phone: string;
   web: string;

@@ -213,7 +213,11 @@ function load(): State {
     if (raw) {
       const s = JSON.parse(raw) as State;
       // state saved before signatures and Outlook setup existed
-      if (!s.settings.signatures?.every((x) => x.name)) s.settings.signatures = clone(DEFAULT_SIGNATURES); // pre name/title drafts
+      // signatures saved by earlier drafts (team/company, or name/title without a company line)
+      if (!s.settings.signatures?.every((x) => x.name && 'company' in x)) {
+        s.settings.signatures = clone(DEFAULT_SIGNATURES);
+        s.settings.signatureFor = { ...DEFAULT_SIGNATURE_FOR };
+      }
       s.settings.signatureFooter ??= { ...DEFAULT_FOOTER };
       s.settings.signatureFor ??= { ...DEFAULT_SIGNATURE_FOR };
       s.settings.mailbox ??= { ...DEFAULT_MAILBOX };

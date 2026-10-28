@@ -83,12 +83,12 @@ func TestBuildRejectsBadRecipient(t *testing.T) {
 func TestSignatureAndMailboxSetup(t *testing.T) {
 	sig := DefaultSignatures[0]
 	_, html, text := Render("mailbox.setup", Data{Origin: "https://tems.example", FirstName: "Ann", Actor: "Root", WorkEmail: "ann@techzaz.lk", Signature: &sig, Footer: DefaultFooter})
-	for _, want := range []string{"ann@techzaz.lk", "mail.techzaz.lk", "993", "STARTTLS", "Saeed Ahamed", "Chief executive officer", "/brand/logo-full.png", "/brand/partners.png", `href="tel:+97439949696"`, `href="https://www.techzaz.lk"`, "Disclaimer: The contents"} {
+	for _, want := range []string{"ann@techzaz.lk", "mail.techzaz.lk", "993", "STARTTLS", "SAEED AHAMED", "Chief Executive Officer", "Techzaz Networks (Pvt) Ltd", "/brand/logo-full.png", "/brand/partners.png", `href="tel:+767662071"`, `href="https://Techzaz.lk"`, "Disclaimer: The contents"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("html is missing %q", want)
 		}
 	}
-	for _, want := range []string{"Incoming server: mail.techzaz.lk · port 993 · SSL/TLS", "--\nSaeed Ahamed\nChief executive officer", "Web: www.techzaz.lk", "AWS Partner", "\n****", "strictly prohibited."} {
+	for _, want := range []string{"Incoming server: mail.techzaz.lk · port 993 · SSL/TLS", "--\nSAEED AHAMED\nChief Executive Officer\nTechzaz Networks (Pvt) Ltd\nEmail: ceo@techzaz.lk", "Web: Techzaz.lk", "AWS Partner", "\n****", "strictly prohibited."} {
 		if !strings.Contains(text, want) {
 			t.Errorf("text is missing %q", want)
 		}
@@ -103,5 +103,18 @@ func TestCategory(t *testing.T) {
 		if got := Category(ev); got != want {
 			t.Errorf("Category(%q) = %q, want %q", ev, got, want)
 		}
+	}
+}
+
+func TestDefaultSignatures(t *testing.T) {
+	seen := map[string]bool{}
+	for _, s := range DefaultSignatures {
+		if seen[s.ID] || s.Name == "" || s.Company == "" || !strings.HasSuffix(s.Email, "@techzaz.lk") {
+			t.Errorf("bad default signature %+v", s)
+		}
+		seen[s.ID] = true
+	}
+	if len(DefaultSignatures) != 10 {
+		t.Errorf("want 10 default signatures, got %d", len(DefaultSignatures))
 	}
 }
